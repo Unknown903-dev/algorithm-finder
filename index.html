@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Algorithm Finder</title>
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body>
+  <header class="site-header">
+    <nav class="navbar">
+      <a href="#" class="logo">Algorithm Finder</a>
+
+      <div class="nav-links">
+        <a href="#finder">Finder</a>
+        <a href="#library">Library</a>
+        <a href="#practice">Practice</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">Algorithm Decision Helper</p>
+      <h1>Find the right algorithm pattern for your coding problem.</h1>
+      <p class="hero-text">
+        helps you identify whether to use binary search, BFS,
+        dynamic programming, hash maps, sliding window, backtracking, and more
+        by asking simple guided questions.
+      </p>
+
+      <a href="#finder" class="primary-button">Start Algorithm Finder</a>
+    </section>
+  </header>
+
+  <main>
+    <section id="finder" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Interactive Tool</p>
+        <h2>Algorithm Finder</h2>
+        <p>
+          Answer a few questions about the problem and it will recommend
+          an algorithm pattern and explain why it fits.
+        </p>
+      </div>
+
+      <div class="finder-card">
+        <form id="algorithm-form">
+          <div class="question-group">
+            <label for="goal">What is the problem asking you to do?</label>
+            <select id="goal" name="goal" required>
+              <option value="">Choose one</option>
+              <option value="find">Find or search for something</option>
+              <option value="sort">Sort items</option>
+              <option value="shortestPath">Find the shortest path or minimum steps</option>
+              <option value="allCombinations">Generate all combinations or possibilities</option>
+              <option value="optimize">Find the best maximum/minimum result</option>
+              <option value="count">Count, group, or track frequencies</option>
+              <option value="dependencies">Handle prerequisites or dependencies</option>
+            </select>
+          </div>
+
+          <div class="question-group">
+            <label for="inputType">What does the input look like?</label>
+            <select id="inputType" name="inputType" required>
+              <option value="">Choose one</option>
+              <option value="array">Array / List</option>
+              <option value="string">String</option>
+              <option value="graph">Graph / Network</option>
+              <option value="tree">Tree</option>
+              <option value="grid">Grid / Maze</option>
+              <option value="numbers">Numbers</option>
+              <option value="tasks">Tasks / Courses / Dependencies</option>
+            </select>
+          </div>
+
+          <div class="question-group">
+            <label>Which conditions apply?</label>
+
+            <div class="checkbox-grid">
+              <label>
+                <input type="checkbox" name="condition" value="sorted" />
+                Input is sorted
+              </label>
+
+              <label>
+                <input type="checkbox" name="condition" value="fastLookup" />
+                Need fast lookup
+              </label>
+
+              <label>
+                <input type="checkbox" name="condition" value="duplicates" />
+                Need to detect duplicates
+              </label>
+
+              <label>
+                <input type="checkbox" name="condition" value="continuous" />
+                Need a continuous subarray/substring
+              </label>
+
+              <label>
+                <input type="checkbox" name="condition" value="equalCost" />
+                Every move has equal cost
+              </label>
+
+              <label>
+                <input type="checkbox" name="condition" value="weighted" />
+                Paths have different costs
+              </label>
+
+              <label>
+                <input type="checkbox" name="condition" value="overlap" />
+                Same subproblems repeat
+              </label>
+
+              <label>
+                <input type="checkbox" name="condition" value="minMaxRepeated" />
+                Need repeated min/max
+              </label>
+            </div>
+          </div>
+
+          <div class="question-group">
+            <label for="inputSize">How large is the input?</label>
+            <select id="inputSize" name="inputSize" required>
+              <option value="">Choose one</option>
+              <option value="small">Small: n ≤ 100</option>
+              <option value="medium">Medium: n ≤ 10,000</option>
+              <option value="large">Large: n ≤ 100,000+</option>
+              <option value="huge">Huge: n ≥ 1,000,000</option>
+            </select>
+          </div>
+
+          <button type="submit" class="primary-button">Recommend Algorithm</button>
+        </form>
+
+        <article id="result-card" class="result-card hidden">
+          <p class="eyebrow">Recommendation</p>
+          <h3 id="result-title"></h3>
+
+          <p id="result-summary"></p>
+
+          <div class="complexity-grid">
+            <div>
+              <span>Time Complexity</span>
+              <strong id="result-time"></strong>
+            </div>
+
+            <div>
+              <span>Space Complexity</span>
+              <strong id="result-space"></strong>
+            </div>
+          </div>
+
+          <div class="result-section">
+            <h4>Why this fits</h4>
+            <p id="result-why"></p>
+          </div>
+
+          <div class="result-section">
+            <h4>Input Size Analysis</h4>
+            <p id="result-size-analysis"></p>
+          </div>
+
+          <div class="result-section">
+            <h4>Common examples</h4>
+            <ul id="result-examples"></ul>
+          </div>
+
+          <div class="result-section">
+            <h4>Why not another algorithm?</h4>
+            <p id="result-why-not"></p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="library" class="section alt-section">
+      <div class="section-heading">
+        <p class="eyebrow">Study Guide</p>
+        <h2>Algorithm Pattern Library</h2>
+        <p>
+          Use this as a quick reference when you are stuck on what pattern a
+          problem belongs to. Each card includes a copyable C++ example.
+        </p>
+      </div>
+
+      <div id="algorithm-library" class="library-grid"></div>
+    </section>
+
+    <section id="practice" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Practice Mode</p>
+        <h2>Try a Practice Problem</h2>
+        <p>
+          Read the problem and guess the algorithm before revealing the answer.
+        </p>
+      </div>
+
+      <div class="practice-card">
+        <p id="practice-problem"></p>
+
+        <div class="practice-actions">
+          <button id="show-answer-button" class="secondary-button">
+            Show Answer
+          </button>
+
+          <button id="next-question-button" class="secondary-button">
+            Next Question
+          </button>
+        </div>
+
+        <div id="practice-answer" class="practice-answer hidden"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Learn how to choose algorithms, not just memorize them.</p>
+  </footer>
+
+  <div id="code-modal" class="code-modal hidden">
+    <div class="code-modal-overlay" id="code-modal-overlay"></div>
+
+    <div class="code-modal-content">
+      <div class="code-modal-header">
+        <div>
+          <p class="eyebrow">C++ Example</p>
+          <h3 id="code-modal-title">Algorithm Code</h3>
+        </div>
+
+        <button id="close-code-modal" class="modal-close-button" aria-label="Close code popup">
+          ×
+        </button>
+      </div>
+
+      <div class="code-modal-actions">
+        <button id="copy-code-button" class="copy-code-button">
+          Copy Code
+        </button>
+
+        <span id="copy-status" class="copy-status"></span>
+      </div>
+
+      <pre class="modal-code-block"><code id="code-modal-code"></code></pre>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
