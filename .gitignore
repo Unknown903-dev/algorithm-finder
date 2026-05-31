@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+__MACOSX/
+._*
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies / build output
+node_modules/
+dist/
+build/
+
+# Logs and generated files
+*.log
+*.map
+coverage/
+.coverage
