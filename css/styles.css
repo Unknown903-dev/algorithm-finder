@@ -20,14 +20,29 @@
 }
 
 html {
+  min-height: 100%;
   scroll-behavior: smooth;
+  background: var(--bg);
+  overscroll-behavior-y: none;
 }
 
 body {
+  min-height: 100vh;
+  overflow-x: hidden;
   font-family: Arial, Helvetica, sans-serif;
   color: var(--text);
   background: var(--light);
   line-height: 1.6;
+  overscroll-behavior-y: none;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+main {
+  min-height: 100vh;
+  background: var(--light);
 }
 
 a {
@@ -119,6 +134,7 @@ a {
 }
 
 .section {
+  scroll-margin-top: 88px;
   width: min(1120px, 92%);
   margin: 0 auto;
   padding: 72px 0;

@@ -1140,53 +1140,62 @@ const practiceProblems = [
   }
 ];
 
-const form = document.querySelector("#algorithm-form");
-const resultCard = document.querySelector("#result-card");
-const resultTitle = document.querySelector("#result-title");
-const resultSummary = document.querySelector("#result-summary");
-const resultTime = document.querySelector("#result-time");
-const resultSpace = document.querySelector("#result-space");
-const resultWhy = document.querySelector("#result-why");
-const resultSizeAnalysis = document.querySelector("#result-size-analysis");
-const resultExamples = document.querySelector("#result-examples");
-const resultWhyNot = document.querySelector("#result-why-not");
-const algorithmLibrary = document.querySelector("#algorithm-library");
+const selectors = {
+  form: "#algorithm-form",
+  resultCard: "#result-card",
+  resultTitle: "#result-title",
+  resultSummary: "#result-summary",
+  resultTime: "#result-time",
+  resultSpace: "#result-space",
+  resultWhy: "#result-why",
+  resultSizeAnalysis: "#result-size-analysis",
+  resultExamples: "#result-examples",
+  resultWhyNot: "#result-why-not",
+  algorithmLibrary: "#algorithm-library",
+  codeModal: "#code-modal",
+  codeModalOverlay: "#code-modal-overlay",
+  closeCodeModalButton: "#close-code-modal",
+  copyCodeButton: "#copy-code-button",
+  copyStatus: "#copy-status",
+  codeModalTitle: "#code-modal-title",
+  codeModalCode: "#code-modal-code",
+  practiceProblem: "#practice-problem",
+  practiceAnswer: "#practice-answer",
+  showAnswerButton: "#show-answer-button",
+  nextQuestionButton: "#next-question-button"
+};
 
-const codeModal = document.querySelector("#code-modal");
-const codeModalOverlay = document.querySelector("#code-modal-overlay");
-const closeCodeModalButton = document.querySelector("#close-code-modal");
-const copyCodeButton = document.querySelector("#copy-code-button");
-const copyStatus = document.querySelector("#copy-status");
-const codeModalTitle = document.querySelector("#code-modal-title");
-const codeModalCode = document.querySelector("#code-modal-code");
+const dom = Object.fromEntries(
+  Object.entries(selectors).map(([key, selector]) => [
+    key,
+    document.querySelector(selector)
+  ])
+);
 
-const practiceProblem = document.querySelector("#practice-problem");
-const practiceAnswer = document.querySelector("#practice-answer");
-const showAnswerButton = document.querySelector("#show-answer-button");
-const nextQuestionButton = document.querySelector("#next-question-button");
-
-let currentPracticeIndex = -1;
+const state = {
+  currentPracticeIndex: -1
+};
 
 function getSelectedConditions() {
-  const checkedBoxes = document.querySelectorAll("input[name='condition']:checked");
+  return Array.from(document.querySelectorAll("input[name='condition']:checked"), (box) => box.value);
+}
 
-  return Array.from(checkedBoxes).map((box) => box.value);
+function hasCondition(conditions, condition) {
+  return conditions.includes(condition);
 }
 
 function recommendAlgorithm({ goal, inputType, conditions, inputSize }) {
-  const hasCondition = (condition) => conditions.includes(condition);
-
   if (goal === "dependencies" || inputType === "tasks") {
     return algorithms.topologicalSort;
   }
 
-  if (goal === "shortestPath" && hasCondition("weighted")) {
+  if (goal === "shortestPath" && hasCondition(conditions, "weighted")) {
     return algorithms.dijkstra;
   }
 
   if (
     goal === "shortestPath" &&
-    (hasCondition("equalCost") || inputType === "grid" || inputType === "graph")
+    (hasCondition(conditions, "equalCost") || inputType === "grid" || inputType === "graph")
   ) {
     return algorithms.bfs;
   }
@@ -1195,30 +1204,31 @@ function recommendAlgorithm({ goal, inputType, conditions, inputSize }) {
     return algorithms.backtracking;
   }
 
-  if (hasCondition("overlap") || goal === "optimize") {
+  if (hasCondition(conditions, "overlap") || goal === "optimize") {
     return algorithms.dynamicProgramming;
   }
 
-  if (hasCondition("continuous")) {
+  if (hasCondition(conditions, "continuous")) {
     return algorithms.slidingWindow;
   }
 
-  if (hasCondition("minMaxRepeated")) {
+  if (hasCondition(conditions, "minMaxRepeated")) {
     return algorithms.heap;
   }
 
-  if (goal === "count" || hasCondition("fastLookup") || hasCondition("duplicates")) {
+  if (
+    goal === "count" ||
+    hasCondition(conditions, "fastLookup") ||
+    hasCondition(conditions, "duplicates")
+  ) {
     return algorithms.hashMap;
   }
 
-  if (goal === "find" && hasCondition("sorted")) {
+  if (goal === "find" && hasCondition(conditions, "sorted")) {
     return algorithms.binarySearch;
   }
 
-  if (
-    hasCondition("sorted") &&
-    (inputType === "array" || inputType === "string")
-  ) {
+  if (hasCondition(conditions, "sorted") && ["array", "string"].includes(inputType)) {
     return algorithms.twoPointers;
   }
 
@@ -1226,11 +1236,7 @@ function recommendAlgorithm({ goal, inputType, conditions, inputSize }) {
     return algorithms.sorting;
   }
 
-  if (inputType === "graph") {
-    return algorithms.dfs;
-  }
-
-  if (inputType === "tree") {
+  if (["graph", "tree"].includes(inputType)) {
     return algorithms.dfs;
   }
 
@@ -1242,175 +1248,172 @@ function recommendAlgorithm({ goal, inputType, conditions, inputSize }) {
 }
 
 function getInputSizeAnalysis(inputSize, algorithm) {
-  const riskyAlgorithmsForLargeInput = [
+  const riskyForLargeInput = new Set([
     "Brute Force",
     "Backtracking",
     "Floyd-Warshall Algorithm"
-  ];
+  ]);
 
-  const expensiveButSometimesNecessary = [
+  const expensiveButUseful = new Set([
     "Dynamic Programming",
     "Bellman-Ford Algorithm",
     "Segment Tree",
     "Fenwick Tree / Binary Indexed Tree"
-  ];
+  ]);
 
-  if (inputSize === "small") {
-    return "Because the input is small, a simpler solution may be acceptable. Brute force can be useful here because it is easier to write and debug, even if it is not the most efficient option.";
+  const analyses = {
+    small:
+      "Because the input is small, a simpler solution may be acceptable. Brute force can be useful here because it is easier to write and debug, even if it is not the most efficient option.",
+    medium:
+      algorithm.name === "Brute Force"
+        ? "For medium input sizes, brute force may start becoming risky. If the solution has nested loops, check whether it is O(n²) or worse and consider optimizing."
+        : `For medium input sizes, ${algorithm.name} is likely acceptable if the implementation matches the expected complexity. Still compare it against simpler approaches before overcomplicating the solution.`,
+    large: getLargeInputAnalysis(algorithm, riskyForLargeInput, expensiveButUseful),
+    huge: getHugeInputAnalysis(algorithm, riskyForLargeInput)
+  };
+
+  return analyses[inputSize] ||
+    "Input size helps determine whether the recommended algorithm is practical. Larger inputs require lower time complexity.";
+}
+
+function getLargeInputAnalysis(algorithm, riskyForLargeInput, expensiveButUseful) {
+  if (riskyForLargeInput.has(algorithm.name)) {
+    return `${algorithm.name} may be too slow for large input sizes. For n around 100,000 or more, avoid O(n²), O(2ⁿ), and O(n!) solutions unless the constraints are smaller than they look.`;
   }
 
-  if (inputSize === "medium") {
-    if (algorithm.name === "Brute Force") {
-      return "For medium input sizes, brute force may start becoming risky. If the solution has nested loops, check whether it is O(n²) or worse and consider optimizing.";
-    }
-
-    return `For medium input sizes, ${algorithm.name} is likely acceptable if the implementation matches the expected complexity. Still compare it against simpler approaches before overcomplicating the solution.`;
+  if (expensiveButUseful.has(algorithm.name)) {
+    return `${algorithm.name} can work for large inputs, but only if the number of states, edges, or queries is manageable. Always check the exact constraints.`;
   }
 
-  if (inputSize === "large") {
-    if (riskyAlgorithmsForLargeInput.includes(algorithm.name)) {
-      return `${algorithm.name} may be too slow for large input sizes. For n around 100,000 or more, avoid O(n²), O(2ⁿ), and O(n!) solutions unless the constraints are smaller than they look.`;
-    }
+  return `Because the input is large, ${algorithm.name} is a better choice than brute force if it keeps the solution around O(n), O(log n), or O(n log n).`;
+}
 
-    if (expensiveButSometimesNecessary.includes(algorithm.name)) {
-      return `${algorithm.name} can work for large inputs, but only if the number of states, edges, or queries is manageable. Always check the exact constraints.`;
-    }
-
-    return `Because the input is large, ${algorithm.name} is a better choice than brute force if it keeps the solution around O(n), O(log n), or O(n log n).`;
+function getHugeInputAnalysis(algorithm, riskyForLargeInput) {
+  if (riskyForLargeInput.has(algorithm.name)) {
+    return `${algorithm.name} is probably not acceptable for huge input sizes. For n near 1,000,000 or more, you usually need O(n), O(log n), or a very efficient O(n log n) approach.`;
   }
 
-  if (inputSize === "huge") {
-    if (riskyAlgorithmsForLargeInput.includes(algorithm.name)) {
-      return `${algorithm.name} is probably not acceptable for huge input sizes. For n near 1,000,000 or more, you usually need O(n), O(log n), or a very efficient O(n log n) approach.`;
-    }
-
-    if (
-      algorithm.name === "Sorting" ||
-      algorithm.name === "Merge Sort" ||
-      algorithm.name === "Quick Sort"
-    ) {
-      return "For huge input sizes, O(n log n) sorting may still be acceptable, but O(n) or O(log n) solutions are preferred when possible.";
-    }
-
-    return `For huge input sizes, ${algorithm.name} is reasonable only if it avoids nested loops over the full input. The safest target is usually O(n), O(log n), or carefully optimized O(n log n).`;
+  if (["Sorting", "Merge Sort", "Quick Sort"].includes(algorithm.name)) {
+    return "For huge input sizes, O(n log n) sorting may still be acceptable, but O(n) or O(log n) solutions are preferred when possible.";
   }
 
-  return "Input size helps determine whether the recommended algorithm is practical. Larger inputs require lower time complexity.";
+  return `For huge input sizes, ${algorithm.name} is reasonable only if it avoids nested loops over the full input. The safest target is usually O(n), O(log n), or carefully optimized O(n log n).`;
+}
+
+function createElement(tagName, className, textContent) {
+  const element = document.createElement(tagName);
+
+  if (className) {
+    element.className = className;
+  }
+
+  if (textContent) {
+    element.textContent = textContent;
+  }
+
+  return element;
+}
+
+function renderList(parent, items) {
+  parent.replaceChildren(
+    ...items.map((item) => createElement("li", "", item))
+  );
 }
 
 function displayRecommendation(algorithm, inputSize) {
-  resultTitle.textContent = algorithm.name;
-  resultSummary.textContent = algorithm.summary;
-  resultTime.textContent = algorithm.time;
-  resultSpace.textContent = algorithm.space;
-  resultWhy.textContent = algorithm.why;
-  resultSizeAnalysis.textContent = getInputSizeAnalysis(inputSize, algorithm);
-  resultWhyNot.textContent = algorithm.whyNot;
+  dom.resultTitle.textContent = algorithm.name;
+  dom.resultSummary.textContent = algorithm.summary;
+  dom.resultTime.textContent = algorithm.time;
+  dom.resultSpace.textContent = algorithm.space;
+  dom.resultWhy.textContent = algorithm.why;
+  dom.resultSizeAnalysis.textContent = getInputSizeAnalysis(inputSize, algorithm);
+  dom.resultWhyNot.textContent = algorithm.whyNot;
 
-  resultExamples.innerHTML = "";
+  renderList(dom.resultExamples, algorithm.examples);
 
-  algorithm.examples.forEach((example) => {
-    const li = document.createElement("li");
-    li.textContent = example;
-    resultExamples.appendChild(li);
-  });
-
-  resultCard.classList.remove("hidden");
-  resultCard.scrollIntoView({ behavior: "smooth", block: "center" });
+  dom.resultCard.classList.remove("hidden");
+  dom.resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function openCodeModal(algorithmName, codeText) {
-  codeModalTitle.textContent = algorithmName;
-  codeModalCode.textContent = codeText;
-  copyStatus.textContent = "";
+  dom.codeModalTitle.textContent = algorithmName;
+  dom.codeModalCode.textContent = codeText;
+  dom.copyStatus.textContent = "";
 
-  codeModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
+  dom.codeModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
 }
 
 function closeCodeModal() {
-  codeModal.classList.add("hidden");
-  document.body.style.overflow = "";
+  dom.codeModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
 }
 
 async function copyCodeToClipboard() {
-  const codeText = codeModalCode.textContent;
-
   try {
-    await navigator.clipboard.writeText(codeText);
-    copyStatus.textContent = "Copied!";
+    await navigator.clipboard.writeText(dom.codeModalCode.textContent);
+    dom.copyStatus.textContent = "Copied!";
   } catch (error) {
-    copyStatus.textContent = "Copy failed. Select the code and copy manually.";
+    dom.copyStatus.textContent = "Copy failed. Select the code and copy manually.";
   }
+}
+
+function buildAlgorithmCard(key, algorithm) {
+  const card = createElement("article", "algorithm-card");
+  const title = createElement("h3", "", algorithm.name);
+  const summary = createElement("p", "", algorithm.summary);
+  const tagRow = createElement("div", "tag-row");
+  const button = createElement("button", "code-toggle-button", "View C++ Example");
+
+  tagRow.replaceChildren(
+    ...algorithm.tags.map((tag) => createElement("span", "tag", tag))
+  );
+
+  button.addEventListener("click", () => {
+    openCodeModal(algorithm.name, cppExamples[key] || "// C++ example coming soon.");
+  });
+
+  card.append(title, summary, tagRow, button);
+  return card;
 }
 
 function renderAlgorithmLibrary() {
-  const algorithmEntries = Object.entries(algorithms);
-
-  algorithmLibrary.innerHTML = "";
-
-  algorithmEntries.forEach(([key, algorithm]) => {
-    const card = document.createElement("article");
-    card.className = "algorithm-card";
-
-    const title = document.createElement("h3");
-    title.textContent = algorithm.name;
-
-    const summary = document.createElement("p");
-    summary.textContent = algorithm.summary;
-
-    const tagRow = document.createElement("div");
-    tagRow.className = "tag-row";
-
-    algorithm.tags.forEach((tag) => {
-      const tagElement = document.createElement("span");
-      tagElement.className = "tag";
-      tagElement.textContent = tag;
-      tagRow.appendChild(tagElement);
-    });
-
-    const button = document.createElement("button");
-    button.className = "code-toggle-button";
-    button.textContent = "View C++ Example";
-
-    button.addEventListener("click", () => {
-      const codeText = cppExamples[key] || "// C++ example coming soon.";
-      openCodeModal(algorithm.name, codeText);
-    });
-
-    card.appendChild(title);
-    card.appendChild(summary);
-    card.appendChild(tagRow);
-    card.appendChild(button);
-
-    algorithmLibrary.appendChild(card);
+  const cards = Object.entries(algorithms).map(([key, algorithm]) => {
+    return buildAlgorithmCard(key, algorithm);
   });
+
+  dom.algorithmLibrary.replaceChildren(...cards);
+}
+
+function getNextPracticeIndex() {
+  if (practiceProblems.length <= 1) {
+    return 0;
+  }
+
+  let nextIndex = Math.floor(Math.random() * practiceProblems.length);
+
+  while (nextIndex === state.currentPracticeIndex) {
+    nextIndex = Math.floor(Math.random() * practiceProblems.length);
+  }
+
+  return nextIndex;
 }
 
 function loadPracticeProblem() {
-  let randomIndex = Math.floor(Math.random() * practiceProblems.length);
+  state.currentPracticeIndex = getNextPracticeIndex();
 
-  if (practiceProblems.length > 1) {
-    while (randomIndex === currentPracticeIndex) {
-      randomIndex = Math.floor(Math.random() * practiceProblems.length);
-    }
-  }
+  const selectedProblem = practiceProblems[state.currentPracticeIndex];
 
-  currentPracticeIndex = randomIndex;
-  const selectedProblem = practiceProblems[randomIndex];
-
-  practiceProblem.textContent = selectedProblem.problem;
-  practiceAnswer.textContent = selectedProblem.answer;
-
-  practiceAnswer.classList.add("hidden");
-  showAnswerButton.textContent = "Show Answer";
+  dom.practiceProblem.textContent = selectedProblem.problem;
+  dom.practiceAnswer.textContent = selectedProblem.answer;
+  dom.practiceAnswer.classList.add("hidden");
+  dom.showAnswerButton.textContent = "Show Answer";
 }
 
-form.addEventListener("submit", (event) => {
+function handleFormSubmit(event) {
   event.preventDefault();
 
-  const formData = new FormData(form);
-
+  const formData = new FormData(dom.form);
   const answers = {
     goal: formData.get("goal"),
     inputType: formData.get("inputType"),
@@ -1418,42 +1421,34 @@ form.addEventListener("submit", (event) => {
     conditions: getSelectedConditions()
   };
 
-  const recommendation = recommendAlgorithm(answers);
+  displayRecommendation(recommendAlgorithm(answers), answers.inputSize);
+}
 
-  displayRecommendation(recommendation, answers.inputSize);
-});
+function togglePracticeAnswer() {
+  const isHidden = dom.practiceAnswer.classList.toggle("hidden");
+  dom.showAnswerButton.textContent = isHidden ? "Show Answer" : "Hide Answer";
+}
 
-showAnswerButton.addEventListener("click", () => {
-  practiceAnswer.classList.toggle("hidden");
-
-  if (practiceAnswer.classList.contains("hidden")) {
-    showAnswerButton.textContent = "Show Answer";
-  } else {
-    showAnswerButton.textContent = "Hide Answer";
-  }
-});
-
-nextQuestionButton.addEventListener("click", () => {
-  loadPracticeProblem();
-});
-
-closeCodeModalButton.addEventListener("click", () => {
-  closeCodeModal();
-});
-
-codeModalOverlay.addEventListener("click", () => {
-  closeCodeModal();
-});
-
-copyCodeButton.addEventListener("click", () => {
-  copyCodeToClipboard();
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !codeModal.classList.contains("hidden")) {
+function handleKeydown(event) {
+  if (event.key === "Escape" && !dom.codeModal.classList.contains("hidden")) {
     closeCodeModal();
   }
-});
+}
 
-renderAlgorithmLibrary();
-loadPracticeProblem();
+function bindEvents() {
+  dom.form.addEventListener("submit", handleFormSubmit);
+  dom.showAnswerButton.addEventListener("click", togglePracticeAnswer);
+  dom.nextQuestionButton.addEventListener("click", loadPracticeProblem);
+  dom.closeCodeModalButton.addEventListener("click", closeCodeModal);
+  dom.codeModalOverlay.addEventListener("click", closeCodeModal);
+  dom.copyCodeButton.addEventListener("click", copyCodeToClipboard);
+  document.addEventListener("keydown", handleKeydown);
+}
+
+function initApp() {
+  bindEvents();
+  renderAlgorithmLibrary();
+  loadPracticeProblem();
+}
+
+initApp();
