@@ -50,6 +50,55 @@ a {
   text-decoration: none;
 }
 
+.cursor-sparkle {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  border-radius: 999px;
+  transform: translate(-50%, -50%) scale(1);
+  box-shadow: 0 0 14px currentColor;
+  animation: sparkle-pop 720ms ease-out forwards;
+}
+
+.cursor-sparkle::before,
+.cursor-sparkle::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 220%;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.cursor-sparkle::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+@keyframes sparkle-pop {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.35) rotate(0deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(
+        calc(-50% + var(--sparkle-x)),
+        calc(-50% + var(--sparkle-y))
+      )
+      scale(0)
+      rotate(var(--sparkle-rotate));
+  }
+}
+
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .cursor-sparkle {
+    display: none;
+  }
+}
+
 .site-header {
   position: sticky;
   top: 0;
