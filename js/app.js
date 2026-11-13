@@ -315,6 +315,18 @@ function getEdgeKey(from, to) {
   return [from, to].sort().join("-");
 }
 
+function formatVisualNumber(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) return String(value);
+  const absolute = Math.abs(number);
+  if (absolute !== 0 && (absolute >= 1000000 || absolute < 0.001)) {
+    return number.toExponential(2);
+  }
+
+  return Number(number.toFixed(4)).toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
 function createGraphComparison(step) {
   const weights = Object.fromEntries(
     step.graph.edges.map((edge) => [getEdgeKey(edge.from, edge.to).replace("-", ""), edge.weight])
@@ -622,7 +634,7 @@ function renderGraphStep(walkthrough, step) {
       y: (start.y + end.y) / 2 - (edgeKey === "A-C" ? 9 : 5),
       class: "edge-weight"
     });
-    weight.textContent = String(edge.weight);
+    weight.textContent = formatVisualNumber(edge.weight);
     svg.append(line, weight);
   });
 
@@ -683,11 +695,12 @@ function renderGraphStep(walkthrough, step) {
 
 function renderArrayCells(step, getClassName, getLabel) {
   const cells = createElement("div", "array-cells");
+  cells.style.setProperty("--cell-count", Math.min(step.values.length, 8));
 
   step.values.forEach((value, index) => {
     const cell = createElement("div", `array-cell ${getClassName(index)}`.trim());
     const indexLabel = createElement("span", "array-index", `index ${index}`);
-    const valueLabel = createElement("strong", "array-value", String(value));
+    const valueLabel = createElement("strong", "array-value", formatVisualNumber(value));
     const statusLabel = createElement("span", "array-status", getLabel(index));
     cell.append(indexLabel, valueLabel, statusLabel);
     cells.append(cell);

@@ -263,30 +263,32 @@
         </button>
       </header>
 
-      <nav id="walkthrough-switcher" class="walkthrough-switcher" aria-label="Choose a walkthrough"></nav>
+      <div class="visualizer-scroll-region">
+        <nav id="walkthrough-switcher" class="walkthrough-switcher" aria-label="Choose a walkthrough"></nav>
 
-      <form id="walkthrough-input-form" class="walkthrough-input-form" novalidate>
-        <div class="input-panel-heading">
-          <div>
-            <h3>Try your own input</h3>
-            <p id="walkthrough-input-help"></p>
+        <form id="walkthrough-input-form" class="walkthrough-input-form" novalidate>
+          <div class="input-panel-heading">
+            <div>
+              <h3>Try your own input</h3>
+              <p id="walkthrough-input-help"></p>
+            </div>
+            <span id="walkthrough-input-status" class="input-status" aria-live="polite"></span>
           </div>
-          <span id="walkthrough-input-status" class="input-status" aria-live="polite"></span>
+
+          <div id="walkthrough-input-fields" class="walkthrough-input-fields"></div>
+
+          <div class="input-panel-actions">
+            <button class="visualize-button" type="submit">Apply Input</button>
+            <button id="reset-walkthrough-input" class="restart-button" type="button">Reset to Example</button>
+          </div>
+        </form>
+
+        <div id="visualizer-stage" class="visualizer-stage"></div>
+
+        <div class="step-message" aria-live="polite">
+          <span id="visualizer-step-counter" class="step-counter"></span>
+          <p id="visualizer-explanation"></p>
         </div>
-
-        <div id="walkthrough-input-fields" class="walkthrough-input-fields"></div>
-
-        <div class="input-panel-actions">
-          <button class="visualize-button" type="submit">Apply Input</button>
-          <button id="reset-walkthrough-input" class="restart-button" type="button">Reset to Example</button>
-        </div>
-      </form>
-
-      <div id="visualizer-stage" class="visualizer-stage"></div>
-
-      <div class="step-message" aria-live="polite">
-        <span id="visualizer-step-counter" class="step-counter"></span>
-        <p id="visualizer-explanation"></p>
       </div>
 
       <footer class="visualizer-controls">
