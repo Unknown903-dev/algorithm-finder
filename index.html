@@ -162,6 +162,10 @@
             <h4>Why not another algorithm?</h4>
             <p id="result-why-not"></p>
           </div>
+
+          <button id="result-visualize-button" class="visualize-button hidden" type="button">
+            Visualize
+          </button>
         </article>
       </div>
     </section>
@@ -237,9 +241,49 @@
     </div>
   </div>
 
+  <div id="visualizer-modal" class="visualizer-modal hidden" aria-hidden="true">
+    <div class="visualizer-overlay" id="visualizer-overlay"></div>
+
+    <section
+      class="visualizer-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="visualizer-title"
+      aria-describedby="visualizer-explanation"
+    >
+      <header class="visualizer-header">
+        <div>
+          <p class="eyebrow">Step-by-step walkthrough</p>
+          <h2 id="visualizer-title"></h2>
+          <p id="visualizer-subtitle" class="visualizer-subtitle"></p>
+        </div>
+
+        <button id="close-visualizer" class="modal-close-button" type="button" aria-label="Close visualization">
+          ×
+        </button>
+      </header>
+
+      <nav id="walkthrough-switcher" class="walkthrough-switcher" aria-label="Choose a walkthrough"></nav>
+
+      <div id="visualizer-stage" class="visualizer-stage"></div>
+
+      <div class="step-message" aria-live="polite">
+        <span id="visualizer-step-counter" class="step-counter"></span>
+        <p id="visualizer-explanation"></p>
+      </div>
+
+      <footer class="visualizer-controls">
+        <button id="previous-step" class="secondary-button" type="button">Previous</button>
+        <button id="next-step" class="primary-button" type="button">Next Step</button>
+        <button id="restart-walkthrough" class="restart-button" type="button">Restart</button>
+      </footer>
+    </section>
+  </div>
+
   <script src="js/data/algorithms.js" defer></script>
   <script src="js/data/cpp-examples.js" defer></script>
   <script src="js/data/practice-problems.js" defer></script>
+  <script src="js/data/walkthroughs.js" defer></script>
   <script src="js/effects/sparkle-cursor.js" defer></script>
   <script src="js/app.js" defer></script>
 </body>

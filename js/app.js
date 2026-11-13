@@ -1,4 +1,4 @@
-const { algorithms, cppExamples, practiceProblems } = window.AlgorithmFinderData;
+const { algorithms, cppExamples, practiceProblems, walkthroughs } = window.AlgorithmFinderData;
 
 const selectors = {
   form: "#algorithm-form",
@@ -11,6 +11,7 @@ const selectors = {
   resultSizeAnalysis: "#result-size-analysis",
   resultExamples: "#result-examples",
   resultWhyNot: "#result-why-not",
+  resultVisualizeButton: "#result-visualize-button",
   algorithmLibrary: "#algorithm-library",
   codeModal: "#code-modal",
   codeModalOverlay: "#code-modal-overlay",
@@ -22,7 +23,20 @@ const selectors = {
   practiceProblem: "#practice-problem",
   practiceAnswer: "#practice-answer",
   showAnswerButton: "#show-answer-button",
-  nextQuestionButton: "#next-question-button"
+  nextQuestionButton: "#next-question-button",
+  visualizerModal: "#visualizer-modal",
+  visualizerOverlay: "#visualizer-overlay",
+  visualizerDialog: ".visualizer-dialog",
+  closeVisualizerButton: "#close-visualizer",
+  walkthroughSwitcher: "#walkthrough-switcher",
+  visualizerTitle: "#visualizer-title",
+  visualizerSubtitle: "#visualizer-subtitle",
+  visualizerStage: "#visualizer-stage",
+  visualizerStepCounter: "#visualizer-step-counter",
+  visualizerExplanation: "#visualizer-explanation",
+  previousStepButton: "#previous-step",
+  nextStepButton: "#next-step",
+  restartWalkthroughButton: "#restart-walkthrough"
 };
 
 const dom = Object.fromEntries(
@@ -33,7 +47,12 @@ const dom = Object.fromEntries(
 );
 
 const state = {
-  currentPracticeIndex: -1
+  currentPracticeIndex: -1,
+  currentRecommendationKey: null,
+  activeWalkthroughKey: null,
+  walkthroughStep: 0,
+  walkthroughTrace: [],
+  visualizerOpener: null
 };
 
 function getSelectedConditions() {
@@ -180,7 +199,9 @@ function renderList(parent, items) {
   );
 }
 
-function displayRecommendation(algorithm, inputSize) {
+function displayRecommendation(algorithmKey, inputSize) {
+  const algorithm = algorithms[algorithmKey];
+
   dom.resultTitle.textContent = algorithm.name;
   dom.resultSummary.textContent = algorithm.summary;
   dom.resultTime.textContent = algorithm.time;
@@ -190,6 +211,9 @@ function displayRecommendation(algorithm, inputSize) {
   dom.resultWhyNot.textContent = algorithm.whyNot;
 
   renderList(dom.resultExamples, algorithm.examples);
+
+  state.currentRecommendationKey = algorithmKey;
+  dom.resultVisualizeButton.classList.toggle("hidden", !walkthroughs[algorithmKey]);
 
   dom.resultCard.classList.remove("hidden");
   dom.resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -223,6 +247,7 @@ function buildAlgorithmCard(key, algorithm) {
   const title = createElement("h3", "", algorithm.name);
   const summary = createElement("p", "", algorithm.summary);
   const tagRow = createElement("div", "tag-row");
+  const actions = createElement("div", "algorithm-card-actions");
   const button = createElement("button", "code-toggle-button", "View C++ Example");
 
   tagRow.replaceChildren(
@@ -233,7 +258,16 @@ function buildAlgorithmCard(key, algorithm) {
     openCodeModal(algorithm.name, cppExamples[key] || "// C++ example coming soon.");
   });
 
-  card.append(title, summary, tagRow, button);
+  actions.append(button);
+
+  if (walkthroughs[key]) {
+    const visualizeButton = createElement("button", "visualize-button", "Visualize");
+    visualizeButton.type = "button";
+    visualizeButton.addEventListener("click", () => openWalkthrough(key, visualizeButton));
+    actions.append(visualizeButton);
+  }
+
+  card.append(title, summary, tagRow, actions);
   return card;
 }
 
@@ -243,6 +277,279 @@ function renderAlgorithmLibrary() {
   });
 
   dom.algorithmLibrary.replaceChildren(...cards);
+}
+
+function getAlgorithmKey(algorithm) {
+  const match = Object.entries(algorithms).find(([, candidate]) => candidate === algorithm);
+  return match ? match[0] : null;
+}
+
+function createSvgElement(tagName, attributes = {}) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tagName);
+
+  Object.entries(attributes).forEach(([name, value]) => {
+    element.setAttribute(name, value);
+  });
+
+  return element;
+}
+
+function getEdgeKey(from, to) {
+  return [from, to].sort().join("-");
+}
+
+function renderGraphStep(walkthrough, step) {
+  const layout = {
+    A: { x: 54, y: 132 },
+    B: { x: 190, y: 46 },
+    C: { x: 326, y: 132 }
+  };
+  const wrapper = createElement("div", "graph-walkthrough");
+  const graphPanel = createElement("div", "graph-panel");
+  const svg = createSvgElement("svg", {
+    viewBox: "0 0 380 190",
+    role: "img",
+    "aria-label": "Undirected graph with A to B weight 1, B to C weight 1, and A to C weight 10"
+  });
+  const highlightedEdges = new Set(step.highlightedEdges || []);
+  const finalEdges = new Set();
+
+  if (step.finalPath) {
+    for (let index = 0; index < step.finalPath.length - 1; index += 1) {
+      finalEdges.add(getEdgeKey(step.finalPath[index], step.finalPath[index + 1]));
+    }
+  }
+
+  walkthrough.graph.edges.forEach((edge) => {
+    const start = layout[edge.from];
+    const end = layout[edge.to];
+    const edgeKey = getEdgeKey(edge.from, edge.to);
+    const edgeClass = finalEdges.has(edgeKey)
+      ? "graph-edge graph-edge-final"
+      : highlightedEdges.has(edgeKey)
+        ? "graph-edge graph-edge-active"
+        : "graph-edge";
+    const line = createSvgElement("line", {
+      x1: start.x,
+      y1: start.y,
+      x2: end.x,
+      y2: end.y,
+      class: edgeClass
+    });
+    const weight = createSvgElement("text", {
+      x: (start.x + end.x) / 2,
+      y: (start.y + end.y) / 2 - (edgeKey === "A-C" ? 9 : 5),
+      class: "edge-weight"
+    });
+    weight.textContent = String(edge.weight);
+    svg.append(line, weight);
+  });
+
+  walkthrough.graph.nodes.forEach((node) => {
+    const point = layout[node];
+    const isActive = step.activeNode === node;
+    const isFinal = step.finalPath && step.finalPath.includes(node);
+    const isVisited = step.visited && step.visited.includes(node);
+    const group = createSvgElement("g", {
+      class: `graph-node${isFinal ? " graph-node-final" : isActive ? " graph-node-active" : isVisited ? " graph-node-visited" : ""}`
+    });
+    const circle = createSvgElement("circle", { cx: point.x, cy: point.y, r: 28 });
+    const label = createSvgElement("text", { x: point.x, y: point.y + 6, class: "node-label" });
+    const status = createSvgElement("text", { x: point.x, y: point.y + 48, class: "node-status" });
+    label.textContent = node;
+    status.textContent = isFinal ? "PATH" : isActive ? "ACTIVE" : isVisited ? "VISITED" : "";
+    group.append(circle, label, status);
+    svg.append(group);
+  });
+
+  graphPanel.append(svg);
+  const details = createElement("div", "graph-state-panel");
+
+  if (step.distances) {
+    const distanceBlock = createElement("section", "state-block");
+    distanceBlock.append(createElement("h3", "", "Tentative distances"));
+    const distanceRow = createElement("div", "distance-row");
+    Object.entries(step.distances).forEach(([node, distance]) => {
+      const item = createElement("span", step.distanceUpdate && step.distanceUpdate.node === node ? "distance-chip updated" : "distance-chip");
+      item.textContent = `${node}: ${distance}`;
+      distanceRow.append(item);
+    });
+    distanceBlock.append(distanceRow);
+    if (step.distanceUpdate) {
+      distanceBlock.append(createElement("p", "update-callout", `${step.distanceUpdate.node} lowered: ${step.distanceUpdate.from} → ${step.distanceUpdate.to}`));
+    }
+    details.append(distanceBlock);
+  }
+
+  const queueBlock = createElement("section", "state-block");
+  queueBlock.append(createElement("h3", "", walkthrough === walkthroughs.dijkstra ? "Priority queue" : "Queue (front → back)"));
+  queueBlock.append(createElement("p", "state-value", step.queue.length ? step.queue.join("  ·  ") : "Empty"));
+  details.append(queueBlock);
+
+  const visitedBlock = createElement("section", "state-block");
+  visitedBlock.append(createElement("h3", "", "Visited nodes"));
+  visitedBlock.append(createElement("p", "state-value", step.visited.length ? step.visited.join(" → ") : "None yet"));
+  details.append(visitedBlock);
+
+  if (step.result) {
+    details.append(createElement("p", "walkthrough-result", step.result));
+  }
+
+  wrapper.append(graphPanel, details);
+  return wrapper;
+}
+
+function renderArrayCells(step, getClassName, getLabel) {
+  const cells = createElement("div", "array-cells");
+
+  step.values.forEach((value, index) => {
+    const cell = createElement("div", `array-cell ${getClassName(index)}`.trim());
+    const indexLabel = createElement("span", "array-index", `index ${index}`);
+    const valueLabel = createElement("strong", "array-value", String(value));
+    const statusLabel = createElement("span", "array-status", getLabel(index));
+    cell.append(indexLabel, valueLabel, statusLabel);
+    cells.append(cell);
+  });
+
+  return cells;
+}
+
+function renderBinarySearchStep(step) {
+  const wrapper = createElement("div", "array-walkthrough");
+  const rangeText = step.foundIndex === undefined
+    ? `Current range: ${step.left}–${step.right}`
+    : `Result: zero-based index ${step.foundIndex}`;
+  wrapper.append(createElement("p", "array-summary", `Target: ${step.target} · ${rangeText}`));
+  wrapper.append(renderArrayCells(
+    step,
+    (index) => {
+      if (index === step.foundIndex) return "found";
+      if (index === step.midpoint) return "midpoint";
+      if (step.discarded.includes(index)) return "discarded";
+      if (index >= step.left && index <= step.right) return "in-range";
+      return "";
+    },
+    (index) => {
+      if (index === step.foundIndex) return "FOUND";
+      if (index === step.midpoint) return "MIDPOINT";
+      if (step.discarded.includes(index)) return "DISCARDED";
+      if (index >= step.left && index <= step.right) return "IN RANGE";
+      return "";
+    }
+  ));
+  if (step.result) wrapper.append(createElement("p", "walkthrough-result", step.result));
+  return wrapper;
+}
+
+function renderSlidingWindowStep(step) {
+  const wrapper = createElement("div", "array-walkthrough");
+  const end = step.start + step.windowSize - 1;
+  const summary = createElement("div", "window-summary");
+  const changes = step.outgoing === null
+    ? "Initial window"
+    : `Outgoing: ${step.outgoing} · Incoming: ${step.incoming}`;
+  summary.append(
+    createElement("span", "", `Window: indices ${step.start}–${end}`),
+    createElement("span", "", changes),
+    createElement("span", "", `Current sum: ${step.sum}`),
+    createElement("span", "best-sum", `Best sum: ${step.best}`)
+  );
+  wrapper.append(summary);
+  wrapper.append(renderArrayCells(
+    step,
+    (index) => index >= step.start && index <= end ? "in-window" : "outside-window",
+    (index) => {
+      if (index === step.start) return "WINDOW START";
+      if (index === end) return "WINDOW END";
+      if (index > step.start && index < end) return "IN WINDOW";
+      return "OUTSIDE";
+    }
+  ));
+  if (step.result) wrapper.append(createElement("p", "walkthrough-result", step.result));
+  return wrapper;
+}
+
+function renderWalkthroughSwitcher() {
+  const buttons = Object.entries(walkthroughs).map(([key, walkthrough]) => {
+    const button = createElement("button", "walkthrough-tab", walkthrough.title.replace(" Algorithm", ""));
+    const isActive = key === state.activeWalkthroughKey;
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(isActive));
+    if (isActive) button.classList.add("active");
+    button.addEventListener("click", () => activateWalkthrough(key));
+    return button;
+  });
+  dom.walkthroughSwitcher.replaceChildren(...buttons);
+}
+
+function renderWalkthroughStep() {
+  const walkthrough = walkthroughs[state.activeWalkthroughKey];
+  const step = state.walkthroughTrace[state.walkthroughStep];
+  let visualization;
+
+  if (walkthrough.type === "graph") {
+    visualization = renderGraphStep(walkthrough, step);
+  } else if (walkthrough.type === "array") {
+    visualization = renderBinarySearchStep(step);
+  } else {
+    visualization = renderSlidingWindowStep(step);
+  }
+
+  dom.visualizerTitle.textContent = walkthrough.title;
+  dom.visualizerSubtitle.textContent = walkthrough.subtitle;
+  dom.visualizerStage.replaceChildren(visualization);
+  dom.visualizerStepCounter.textContent = `Step ${state.walkthroughStep + 1} of ${state.walkthroughTrace.length}`;
+  dom.visualizerExplanation.textContent = step.explanation;
+  dom.previousStepButton.disabled = state.walkthroughStep === 0;
+  dom.nextStepButton.disabled = state.walkthroughStep === state.walkthroughTrace.length - 1;
+  renderWalkthroughSwitcher();
+}
+
+function activateWalkthrough(key) {
+  state.activeWalkthroughKey = key;
+  state.walkthroughTrace = walkthroughs[key].generateTrace();
+  state.walkthroughStep = 0;
+  renderWalkthroughStep();
+}
+
+function openWalkthrough(key, opener) {
+  if (!walkthroughs[key]) return;
+
+  if (!dom.codeModal.classList.contains("hidden")) closeCodeModal();
+  state.visualizerOpener = opener || document.activeElement;
+  activateWalkthrough(key);
+  dom.visualizerModal.classList.remove("hidden");
+  dom.visualizerModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  dom.closeVisualizerButton.focus();
+}
+
+function closeWalkthrough() {
+  dom.visualizerModal.classList.add("hidden");
+  dom.visualizerModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+
+  if (state.visualizerOpener && document.contains(state.visualizerOpener)) {
+    state.visualizerOpener.focus();
+  }
+}
+
+function changeWalkthroughStep(amount) {
+  const nextStep = Math.min(
+    Math.max(state.walkthroughStep + amount, 0),
+    state.walkthroughTrace.length - 1
+  );
+
+  if (nextStep !== state.walkthroughStep) {
+    state.walkthroughStep = nextStep;
+    renderWalkthroughStep();
+  }
+}
+
+function restartWalkthrough() {
+  state.walkthroughTrace = walkthroughs[state.activeWalkthroughKey].generateTrace();
+  state.walkthroughStep = 0;
+  renderWalkthroughStep();
 }
 
 function getNextPracticeIndex() {
@@ -281,7 +588,8 @@ function handleFormSubmit(event) {
     conditions: getSelectedConditions()
   };
 
-  displayRecommendation(recommendAlgorithm(answers), answers.inputSize);
+  const algorithmKey = getAlgorithmKey(recommendAlgorithm(answers));
+  displayRecommendation(algorithmKey, answers.inputSize);
 }
 
 function togglePracticeAnswer() {
@@ -290,6 +598,43 @@ function togglePracticeAnswer() {
 }
 
 function handleKeydown(event) {
+  const visualizerIsOpen = !dom.visualizerModal.classList.contains("hidden");
+
+  if (visualizerIsOpen && event.key === "Escape") {
+    event.preventDefault();
+    closeWalkthrough();
+    return;
+  }
+
+  if (visualizerIsOpen && event.key === "ArrowLeft") {
+    event.preventDefault();
+    changeWalkthroughStep(-1);
+    return;
+  }
+
+  if (visualizerIsOpen && event.key === "ArrowRight") {
+    event.preventDefault();
+    changeWalkthroughStep(1);
+    return;
+  }
+
+  if (visualizerIsOpen && event.key === "Tab") {
+    const focusable = Array.from(dom.visualizerDialog.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ));
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+    return;
+  }
+
   if (event.key === "Escape" && !dom.codeModal.classList.contains("hidden")) {
     closeCodeModal();
   }
@@ -302,6 +647,14 @@ function bindEvents() {
   dom.closeCodeModalButton.addEventListener("click", closeCodeModal);
   dom.codeModalOverlay.addEventListener("click", closeCodeModal);
   dom.copyCodeButton.addEventListener("click", copyCodeToClipboard);
+  dom.resultVisualizeButton.addEventListener("click", () => {
+    openWalkthrough(state.currentRecommendationKey, dom.resultVisualizeButton);
+  });
+  dom.closeVisualizerButton.addEventListener("click", closeWalkthrough);
+  dom.visualizerOverlay.addEventListener("click", closeWalkthrough);
+  dom.previousStepButton.addEventListener("click", () => changeWalkthroughStep(-1));
+  dom.nextStepButton.addEventListener("click", () => changeWalkthroughStep(1));
+  dom.restartWalkthroughButton.addEventListener("click", restartWalkthrough);
   document.addEventListener("keydown", handleKeydown);
 }
 
