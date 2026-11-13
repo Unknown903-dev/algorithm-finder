@@ -67,7 +67,8 @@ const state = {
     binarySearch: cloneInput(walkthroughs.binarySearch.preset),
     slidingWindow: cloneInput(walkthroughs.slidingWindow.preset),
     sortingComparison: cloneInput(walkthroughs.sortingComparison.preset),
-    coinChange: cloneInput(walkthroughs.dynamicProgramming.preset)
+    coinChange: cloneInput(walkthroughs.dynamicProgramming.preset),
+    nQueens: cloneInput(walkthroughs.backtracking.preset)
   },
   lastValidInputs: Object.fromEntries(
     Object.entries(walkthroughs).map(([key, walkthrough]) => [key, cloneInput(walkthrough.preset)])
@@ -461,6 +462,18 @@ function renderWalkthroughInputForm(errors = {}) {
       createSelectField({ name: "start", label: "Start node", value: input.start, options: ["A", "B", "C"] }),
       createSelectField({ name: "destination", label: "Destination", value: input.destination, options: ["A", "B", "C"] })
     );
+  } else if (walkthrough.type === "nQueens") {
+    dom.walkthroughInputHelp.textContent = "Choose a board size from 1 to 8. The search stops after the first solution.";
+    fields.push(
+      createInputField({
+        name: "size",
+        label: "Board size",
+        value: input.size,
+        type: "number",
+        hint: "One queen is placed per row; columns are tried left to right",
+        attributes: { min: "1", max: "8", step: "1" }
+      })
+    );
   } else if (walkthrough.type === "coinChange") {
     dom.walkthroughInputHelp.textContent = "Use up to 10 positive whole-number denominations and a whole-number target from 0 to 30.";
     fields.push(
@@ -561,6 +574,14 @@ function normalizeWalkthroughInput(key, source) {
     return { input, errors };
   }
 
+  if (walkthrough.type === "nQueens") {
+    const size = Number(source.size);
+    if (source.size === "" || !Number.isInteger(size) || size < 1 || size > 8) {
+      errors.size = "Board size must be a whole number from 1 to 8.";
+    }
+    return { input: { size }, errors };
+  }
+
   if (walkthrough.type === "coinChange") {
     const parsedCoins = parseNumberList(source.coins);
     const target = Number(source.target);
@@ -625,6 +646,10 @@ function getWalkthroughInputDraft() {
       start: fields.start.value,
       destination: fields.destination.value
     };
+  }
+
+  if (walkthrough.type === "nQueens") {
+    return { size: fields.size.value };
   }
 
   if (walkthrough.type === "coinChange") {
@@ -969,6 +994,101 @@ function renderCoinChangeStep(step) {
   return wrapper;
 }
 
+function isSameSquare(square, row, column) {
+  return square && square.row === row && square.column === column;
+}
+
+function renderNQueensStep(step) {
+  const wrapper = createElement("div", "nqueens-walkthrough");
+  const summary = createElement("div", "nqueens-summary");
+  const placedCount = step.queens.filter((column) => column >= 0).length;
+  summary.append(
+    createElement("span", "", `Board: ${step.size} × ${step.size}`),
+    createElement("span", "", `Queens placed: ${placedCount}`),
+    createElement("span", "", step.activeRow === null ? "Search complete" : `Active row: ${step.activeRow + 1}`),
+    createElement("span", "", "Column order: left → right")
+  );
+
+  const legend = createElement("div", "nqueens-legend");
+  legend.append(
+    createElement("span", "", "? Candidate"),
+    createElement("span", "", "× Rejected"),
+    createElement("span", "", "♛ Queen"),
+    createElement("span", "", "↶ Removed")
+  );
+
+  const board = createElement("div", "nqueens-board");
+  board.style.setProperty("--board-size", step.size);
+  board.style.setProperty("--board-max", `${Math.min(560, Math.max(180, step.size * 90))}px`);
+  board.setAttribute("role", "grid");
+  board.setAttribute("aria-label", `${step.size} by ${step.size} N-Queens board`);
+
+  for (let row = 0; row < step.size; row += 1) {
+    for (let column = 0; column < step.size; column += 1) {
+      const hasQueen = step.queens[row] === column;
+      const isCandidate = isSameSquare(step.candidate, row, column);
+      const isConflict = isSameSquare(step.conflict, row, column);
+      const isRemoval = isSameSquare(step.removalSquare, row, column);
+      const classes = ["nqueens-cell", (row + column) % 2 === 0 ? "light" : "dark"];
+      let symbol = "";
+      let label = "";
+
+      if (row === step.activeRow) classes.push("active-row");
+      if (hasQueen) {
+        classes.push("queen-placed");
+        symbol = "♛";
+        label = "QUEEN";
+      }
+      if (isCandidate && step.action === "reject") {
+        classes.push("candidate-square", "rejected-square");
+        symbol = "×";
+        label = "REJECTED";
+      } else if (isCandidate && step.action === "try-safe") {
+        classes.push("candidate-square", "safe-square");
+        symbol = "?";
+        label = "SAFE";
+      } else if (isCandidate && step.action === "place") {
+        classes.push("placed-now");
+        symbol = "♛";
+        label = "PLACED";
+      }
+      if (isConflict) {
+        classes.push("conflicting-queen");
+        symbol = "♛";
+        label = "CONFLICT";
+      }
+      if (isRemoval && step.action === "before-remove") {
+        classes.push("removing-queen");
+        symbol = "♛";
+        label = "REMOVE";
+      } else if (isRemoval && step.action === "remove") {
+        classes.push("removed-square");
+        symbol = "↶";
+        label = "REMOVED";
+      }
+
+      const cell = createElement("div", classes.join(" "));
+      const coordinate = createElement("span", "nqueens-coordinate", `${row + 1},${column + 1}`);
+      const symbolElement = createElement("strong", "nqueens-symbol", symbol);
+      const stateLabel = createElement("span", "nqueens-cell-label", label);
+      cell.setAttribute("role", "gridcell");
+      cell.setAttribute("aria-label", `Row ${row + 1}, column ${column + 1}${label ? `: ${label.toLowerCase()}` : ": empty"}`);
+      cell.append(coordinate, symbolElement, stateLabel);
+      board.append(cell);
+    }
+  }
+
+  wrapper.append(summary, legend, board);
+
+  if (step.conflict) {
+    wrapper.append(createElement("p", "nqueens-conflict-note", `Conflict: queen at row ${step.conflict.row + 1}, column ${step.conflict.column + 1} attacks on the ${step.conflict.reason}.`));
+  }
+  if (step.result) {
+    wrapper.append(createElement("p", step.solved ? "walkthrough-result" : "walkthrough-result not-found", step.result));
+  }
+  return wrapper;
+}
+
 function getSortingBarHeight(values, value) {
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
@@ -1116,6 +1236,8 @@ function renderWalkthroughStep() {
     visualization = renderSortingComparisonStep(step);
   } else if (walkthrough.type === "coinChange") {
     visualization = renderCoinChangeStep(step);
+  } else if (walkthrough.type === "nQueens") {
+    visualization = renderNQueensStep(step);
   } else {
     visualization = renderSlidingWindowStep(step);
   }

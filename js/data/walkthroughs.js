@@ -12,7 +12,8 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
     binarySearch: { values: [2, 4, 7, 11, 15, 19, 23, 28], target: 19 },
     slidingWindow: { values: [2, 1, 5, 1, 3, 2, 4, 1], windowSize: 3 },
     sortingComparison: { values: [8, 3, 5, 4, 7, 6, 1, 2] },
-    coinChange: { coins: [1, 3, 4], target: 6 }
+    coinChange: { coins: [1, 3, 4], target: 6 },
+    nQueens: { size: 4 }
   };
 
   function clone(value) {
@@ -537,6 +538,112 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
     return trace;
   }
 
+  function createNQueensTrace(input = presets.nQueens) {
+    const size = input.size;
+    const queens = Array(size).fill(-1);
+    const trace = [];
+
+    function snapshot(explanation, details = {}) {
+      trace.push({
+        size,
+        queens: [...queens],
+        explanation,
+        action: "start",
+        activeRow: 0,
+        candidate: null,
+        conflict: null,
+        removalSquare: null,
+        result: null,
+        solved: false,
+        ...details
+      });
+    }
+
+    function findConflict(row, column) {
+      for (let previousRow = 0; previousRow < row; previousRow += 1) {
+        const previousColumn = queens[previousRow];
+        if (previousColumn === column) {
+          return { row: previousRow, column: previousColumn, reason: "same column" };
+        }
+        if (Math.abs(previousRow - row) === Math.abs(previousColumn - column)) {
+          return { row: previousRow, column: previousColumn, reason: "diagonal" };
+        }
+      }
+      return null;
+    }
+
+    function search(row) {
+      if (row === size) {
+        snapshot(`All ${size} queens are placed. The first complete solution is found.`, {
+          action: "solution",
+          activeRow: null,
+          solved: true,
+          result: `Solution found for ${size} × ${size}`
+        });
+        return true;
+      }
+
+      for (let column = 0; column < size; column += 1) {
+        const conflict = findConflict(row, column);
+
+        if (conflict) {
+          snapshot(`Try row ${row + 1}, column ${column + 1}. Reject it because the queen at row ${conflict.row + 1}, column ${conflict.column + 1} attacks on the ${conflict.reason}.`, {
+            action: "reject",
+            activeRow: row,
+            candidate: { row, column },
+            conflict
+          });
+          continue;
+        }
+
+        snapshot(`Try row ${row + 1}, column ${column + 1}. No placed queen attacks this square, so it is safe.`, {
+          action: "try-safe",
+          activeRow: row,
+          candidate: { row, column }
+        });
+
+        queens[row] = column;
+        snapshot(`Place a queen at row ${row + 1}, column ${column + 1}, then continue to the next row.`, {
+          action: "place",
+          activeRow: row,
+          candidate: { row, column }
+        });
+
+        if (search(row + 1)) return true;
+
+        snapshot(`Backtrack to row ${row + 1}. This queen was safe when placed, but every continuation led to a dead end, so remove it.`, {
+          action: "before-remove",
+          activeRow: row,
+          removalSquare: { row, column }
+        });
+        queens[row] = -1;
+        snapshot(`Queen removed from row ${row + 1}, column ${column + 1}. Continue with the next column in this row.`, {
+          action: "remove",
+          activeRow: row,
+          removalSquare: { row, column }
+        });
+      }
+
+      snapshot(`Row ${row + 1} has no safe square left. Return to the previous row and try its next column.`, {
+        action: "dead-end",
+        activeRow: row
+      });
+      return false;
+    }
+
+    snapshot(`Start with an empty ${size} × ${size} board. Place one queen per row and try columns from left to right.`);
+    const solved = search(0);
+
+    if (!solved) {
+      snapshot(`All possibilities for the ${size} × ${size} board are exhausted. No solution exists.`, {
+        action: "no-solution",
+        activeRow: null,
+        result: "No solution"
+      });
+    }
+    return trace;
+  }
+
   function createMergeSortEvents(input) {
     const values = [...input.values];
     const temporary = Array(values.length).fill(null);
@@ -786,6 +893,14 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
       inputGroup: "coinChange",
       preset: clone(presets.coinChange),
       generateTrace: createCoinChangeTrace
+    },
+    backtracking: {
+      title: "N-Queens",
+      subtitle: "Place one queen per row using backtracking",
+      type: "nQueens",
+      inputGroup: "nQueens",
+      preset: clone(presets.nQueens),
+      generateTrace: createNQueensTrace
     },
     sortingComparison: {
       title: "Merge Sort vs. Quick Sort",
