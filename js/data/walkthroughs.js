@@ -11,7 +11,8 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
     graph: { AB: 1, BC: 1, AC: 10, start: "A", destination: "C" },
     binarySearch: { values: [2, 4, 7, 11, 15, 19, 23, 28], target: 19 },
     slidingWindow: { values: [2, 1, 5, 1, 3, 2, 4, 1], windowSize: 3 },
-    sortingComparison: { values: [8, 3, 5, 4, 7, 6, 1, 2] }
+    sortingComparison: { values: [8, 3, 5, 4, 7, 6, 1, 2] },
+    coinChange: { coins: [1, 3, 4], target: 6 }
   };
 
   function clone(value) {
@@ -376,6 +377,166 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
     return trace;
   }
 
+  function getGreedyCoinResult(coins, target) {
+    const descendingCoins = [...coins].sort((a, b) => b - a);
+    const selected = [];
+    let remaining = target;
+
+    for (const coin of descendingCoins) {
+      while (coin <= remaining) {
+        selected.push(coin);
+        remaining -= coin;
+      }
+    }
+
+    return {
+      selected,
+      stuck: remaining !== 0,
+      remaining
+    };
+  }
+
+  function createCoinChangeTrace(input = presets.coinChange) {
+    const coins = [...input.coins];
+    const target = input.target;
+    const dp = Array(target + 1).fill(Infinity);
+    const chosenCoin = Array(target + 1).fill(null);
+    const trace = [];
+
+    function snapshot(explanation, details = {}) {
+      trace.push({
+        coins: [...coins],
+        target,
+        dp: dp.map((value) => Number.isFinite(value) ? value : null),
+        chosenCoin: [...chosenCoin],
+        explanation,
+        phase: "fill",
+        currentAmount: null,
+        coin: null,
+        readAmount: null,
+        candidate: null,
+        previousBest: null,
+        improved: null,
+        reconstructedCoins: [],
+        reconstructionAmounts: [],
+        comparison: null,
+        result: null,
+        ...details
+      });
+    }
+
+    dp[0] = 0;
+    snapshot("Initialize dp[0] = 0 because zero coins make amount 0. Every other amount starts unreached.");
+
+    for (let amount = 1; amount <= target; amount += 1) {
+      const eligibleCoins = coins.filter((coin) => coin <= amount);
+
+      if (!eligibleCoins.length) {
+        snapshot(`No denomination fits amount ${amount}, so dp[${amount}] remains unreached.`, {
+          currentAmount: amount
+        });
+        continue;
+      }
+
+      for (const coin of eligibleCoins) {
+        const readAmount = amount - coin;
+        const previousBest = dp[amount];
+        const candidate = Number.isFinite(dp[readAmount]) ? dp[readAmount] + 1 : Infinity;
+        const improved = candidate < previousBest;
+
+        if (improved) {
+          dp[amount] = candidate;
+          chosenCoin[amount] = coin;
+        }
+
+        const candidateText = Number.isFinite(candidate)
+          ? `dp[${readAmount}] + 1 = ${candidate}`
+          : `dp[${readAmount}] is unreached`;
+        snapshot(`Try coin ${coin} at amount ${amount}: ${candidateText}. ${improved ? `This improves dp[${amount}].` : `This does not improve dp[${amount}].`}`, {
+          currentAmount: amount,
+          coin,
+          readAmount,
+          candidate: Number.isFinite(candidate) ? candidate : null,
+          previousBest: Number.isFinite(previousBest) ? previousBest : null,
+          improved
+        });
+      }
+    }
+
+    const greedy = getGreedyCoinResult(coins, target);
+    const greedyText = greedy.stuck
+      ? `Greedy got stuck after ${greedy.selected.length ? greedy.selected.join(" + ") : "choosing no coins"}; ${greedy.remaining} remains.`
+      : `Greedy: ${greedy.selected.length ? greedy.selected.join(" + ") : "no coins"} (${greedy.selected.length} ${greedy.selected.length === 1 ? "coin" : "coins"}).`;
+
+    if (!Number.isFinite(dp[target])) {
+      snapshot(`Amount ${target} is unreachable with these denominations.`, {
+        phase: "result",
+        currentAmount: target,
+        comparison: {
+          dpText: `DP: target ${target} is unreachable.`,
+          greedyText
+        },
+        result: `Target ${target} is unreachable`
+      });
+      return trace;
+    }
+
+    const reconstructedCoins = [];
+    const reconstructionAmounts = [target];
+    let amount = target;
+
+    if (target === 0) {
+      snapshot("The target is 0, so no reconstruction steps or coins are needed.", {
+        phase: "result",
+        currentAmount: 0,
+        reconstructedCoins: [],
+        reconstructionAmounts: [0],
+        comparison: {
+          dpText: "DP: 0 coins (no coins needed).",
+          greedyText
+        },
+        result: "0 coins — no coins needed"
+      });
+      return trace;
+    }
+
+    snapshot(`The target is reachable with ${dp[target]} coins. Trace the chosen coins backward from amount ${target}.`, {
+      phase: "reconstruct",
+      currentAmount: target,
+      reconstructedCoins: [],
+      reconstructionAmounts: [...reconstructionAmounts]
+    });
+
+    while (amount > 0) {
+      const coin = chosenCoin[amount];
+      const nextAmount = amount - coin;
+      reconstructedCoins.push(coin);
+      reconstructionAmounts.push(nextAmount);
+      snapshot(`dp[${amount}] chose coin ${coin}. Move back to amount ${nextAmount}.`, {
+        phase: "reconstruct",
+        currentAmount: amount,
+        coin,
+        readAmount: nextAmount,
+        reconstructedCoins: [...reconstructedCoins],
+        reconstructionAmounts: [...reconstructionAmounts]
+      });
+      amount = nextAmount;
+    }
+
+    snapshot(`Reconstruction complete: ${reconstructedCoins.join(" + ")}.`, {
+      phase: "result",
+      currentAmount: target,
+      reconstructedCoins: [...reconstructedCoins],
+      reconstructionAmounts: [...reconstructionAmounts],
+      comparison: {
+        dpText: `DP: ${reconstructedCoins.join(" + ")} (${dp[target]} ${dp[target] === 1 ? "coin" : "coins"}).`,
+        greedyText
+      },
+      result: `${dp[target]} ${dp[target] === 1 ? "coin" : "coins"} — ${reconstructedCoins.join(" + ")}`
+    });
+    return trace;
+  }
+
   function createMergeSortEvents(input) {
     const values = [...input.values];
     const temporary = Array(values.length).fill(null);
@@ -617,6 +778,14 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
       inputGroup: "slidingWindow",
       preset: clone(presets.slidingWindow),
       generateTrace: createSlidingWindowTrace
+    },
+    dynamicProgramming: {
+      title: "Minimum Coin Change",
+      subtitle: "Find the fewest unlimited coins needed to reach a target",
+      type: "coinChange",
+      inputGroup: "coinChange",
+      preset: clone(presets.coinChange),
+      generateTrace: createCoinChangeTrace
     },
     sortingComparison: {
       title: "Merge Sort vs. Quick Sort",

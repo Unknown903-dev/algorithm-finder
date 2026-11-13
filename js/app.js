@@ -66,7 +66,8 @@ const state = {
     graph: cloneInput(walkthroughs.bfs.preset),
     binarySearch: cloneInput(walkthroughs.binarySearch.preset),
     slidingWindow: cloneInput(walkthroughs.slidingWindow.preset),
-    sortingComparison: cloneInput(walkthroughs.sortingComparison.preset)
+    sortingComparison: cloneInput(walkthroughs.sortingComparison.preset),
+    coinChange: cloneInput(walkthroughs.dynamicProgramming.preset)
   },
   lastValidInputs: Object.fromEntries(
     Object.entries(walkthroughs).map(([key, walkthrough]) => [key, cloneInput(walkthrough.preset)])
@@ -460,6 +461,23 @@ function renderWalkthroughInputForm(errors = {}) {
       createSelectField({ name: "start", label: "Start node", value: input.start, options: ["A", "B", "C"] }),
       createSelectField({ name: "destination", label: "Destination", value: input.destination, options: ["A", "B", "C"] })
     );
+  } else if (walkthrough.type === "coinChange") {
+    dom.walkthroughInputHelp.textContent = "Use up to 10 positive whole-number denominations and a whole-number target from 0 to 30.";
+    fields.push(
+      createInputField({
+        name: "coins",
+        label: "Coin denominations",
+        value: input.coins.join(", "),
+        hint: "Unlimited coins are available; example: 1, 3, 4"
+      }),
+      createInputField({
+        name: "target",
+        label: "Target amount",
+        value: input.target,
+        type: "number",
+        attributes: { min: "0", max: "30", step: "1" }
+      })
+    );
   } else if (walkthrough.type === "sortingComparison") {
     dom.walkthroughInputHelp.textContent = "Choose a preset or enter 1–16 numbers. The same array is applied to both algorithms.";
     fields.push(
@@ -543,6 +561,30 @@ function normalizeWalkthroughInput(key, source) {
     return { input, errors };
   }
 
+  if (walkthrough.type === "coinChange") {
+    const parsedCoins = parseNumberList(source.coins);
+    const target = Number(source.target);
+
+    if (parsedCoins.error) {
+      errors.coins = parsedCoins.error;
+    } else if (parsedCoins.values.some((coin) => !Number.isInteger(coin) || coin <= 0)) {
+      errors.coins = "Every denomination must be a positive whole number.";
+    } else if (parsedCoins.values.length > 10) {
+      errors.coins = "Use at most 10 denominations.";
+    }
+
+    if (source.target === "" || !Number.isInteger(target) || target < 0) {
+      errors.target = "Target must be a nonnegative whole number.";
+    } else if (target > 30) {
+      errors.target = "Keep the target at 30 or less so the table remains readable.";
+    }
+
+    return {
+      input: { coins: [...new Set(parsedCoins.values)], target },
+      errors
+    };
+  }
+
   const parsedValues = parseNumberList(source.values);
   if (parsedValues.error) errors.values = parsedValues.error;
 
@@ -583,6 +625,10 @@ function getWalkthroughInputDraft() {
       start: fields.start.value,
       destination: fields.destination.value
     };
+  }
+
+  if (walkthrough.type === "coinChange") {
+    return { coins: fields.coins.value, target: fields.target.value };
   }
 
   if (walkthrough.type === "array") {
@@ -844,6 +890,85 @@ function renderSlidingWindowStep(step) {
   return wrapper;
 }
 
+function renderCoinChangeStep(step) {
+  const wrapper = createElement("div", "coin-change-walkthrough");
+  const definition = createElement("p", "dp-definition", "dp[a] = the fewest coins needed to make amount a. An ∞ cell is currently unreached.");
+  const coinRow = createElement("div", "coin-denominations");
+  coinRow.append(createElement("span", "coin-row-label", "Unlimited coins:"));
+  step.coins.forEach((coin) => {
+    const chip = createElement("span", coin === step.coin ? "coin-chip active" : "coin-chip", String(coin));
+    if (coin === step.coin) chip.append(createElement("small", "", "TRYING"));
+    coinRow.append(chip);
+  });
+
+  const table = createElement("div", "dp-table");
+  table.style.setProperty("--dp-count", step.dp.length);
+  step.dp.forEach((value, amount) => {
+    const classes = ["dp-cell"];
+    const labels = [];
+    if (amount === step.currentAmount) {
+      classes.push("current");
+      labels.push("CURRENT");
+    }
+    if (amount === step.readAmount) {
+      classes.push("read");
+      labels.push("READ");
+    }
+    if (step.reconstructionAmounts.includes(amount)) {
+      classes.push("reconstruction-path");
+      labels.push("PATH");
+    }
+
+    const cell = createElement("div", classes.join(" "));
+    const amountLabel = createElement("span", "dp-amount", `amount ${amount}`);
+    const valueLabel = createElement("strong", "dp-value", value === null ? "∞" : String(value));
+    const viaLabel = createElement("span", "dp-via", amount === 0 ? "base case" : step.chosenCoin[amount] === null ? "unreached" : `via coin ${step.chosenCoin[amount]}`);
+    const stateLabel = createElement("span", "dp-cell-state", [...new Set(labels)].join(" · "));
+    cell.setAttribute("aria-label", `Amount ${amount}: ${value === null ? "unreached" : `${value} coins`}${viaLabel.textContent ? `, ${viaLabel.textContent}` : ""}${stateLabel.textContent ? `, ${stateLabel.textContent.toLowerCase()}` : ""}`);
+    cell.append(amountLabel, valueLabel, viaLabel, stateLabel);
+    table.append(cell);
+  });
+
+  wrapper.append(definition, coinRow, table);
+
+  if (step.phase === "fill" && step.coin !== null) {
+    const calculation = createElement("div", "dp-calculation");
+    const formula = step.candidate === null
+      ? `dp[${step.readAmount}] is unreached, so coin ${step.coin} cannot make amount ${step.currentAmount}.`
+      : `dp[${step.readAmount}] + 1 = ${step.candidate}`;
+    const previous = step.previousBest === null ? "∞" : step.previousBest;
+    calculation.append(
+      createElement("strong", "", `Trying coin ${step.coin}`),
+      createElement("span", "dp-formula", formula),
+      createElement("span", "", `Previous best for dp[${step.currentAmount}]: ${previous}`),
+      createElement("span", step.improved ? "candidate-result improved" : "candidate-result unchanged", step.improved ? "Improves the current best" : "No improvement")
+    );
+    wrapper.append(calculation);
+  }
+
+  if (step.phase === "reconstruct") {
+    const reconstruction = createElement("div", "coin-reconstruction");
+    reconstruction.append(
+      createElement("strong", "", "Chosen coins so far"),
+      createElement("span", "", step.reconstructedCoins.length ? step.reconstructedCoins.join(" + ") : "Start at the target")
+    );
+    wrapper.append(reconstruction);
+  }
+
+  if (step.comparison) {
+    const comparison = createElement("div", "coin-comparison");
+    const dpResult = createElement("section", "coin-result-card dp-result-card");
+    const greedyResult = createElement("section", "coin-result-card greedy-result-card");
+    dpResult.append(createElement("h3", "", "Dynamic Programming"), createElement("p", "", step.comparison.dpText));
+    greedyResult.append(createElement("h3", "", "Largest-first Greedy"), createElement("p", "", step.comparison.greedyText));
+    comparison.append(dpResult, greedyResult);
+    wrapper.append(comparison);
+  }
+
+  if (step.result) wrapper.append(createElement("p", "walkthrough-result", step.result));
+  return wrapper;
+}
+
 function getSortingBarHeight(values, value) {
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
@@ -989,6 +1114,8 @@ function renderWalkthroughStep() {
     visualization = renderBinarySearchStep(step);
   } else if (walkthrough.type === "sortingComparison") {
     visualization = renderSortingComparisonStep(step);
+  } else if (walkthrough.type === "coinChange") {
+    visualization = renderCoinChangeStep(step);
   } else {
     visualization = renderSlidingWindowStep(step);
   }
