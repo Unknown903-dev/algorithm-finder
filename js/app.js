@@ -31,6 +31,11 @@ const selectors = {
   walkthroughSwitcher: "#walkthrough-switcher",
   visualizerTitle: "#visualizer-title",
   visualizerSubtitle: "#visualizer-subtitle",
+  walkthroughInputForm: "#walkthrough-input-form",
+  walkthroughInputHelp: "#walkthrough-input-help",
+  walkthroughInputStatus: "#walkthrough-input-status",
+  walkthroughInputFields: "#walkthrough-input-fields",
+  resetWalkthroughInputButton: "#reset-walkthrough-input",
   visualizerStage: "#visualizer-stage",
   visualizerStepCounter: "#visualizer-step-counter",
   visualizerExplanation: "#visualizer-explanation",
@@ -46,13 +51,25 @@ const dom = Object.fromEntries(
   ])
 );
 
+function cloneInput(input) {
+  return JSON.parse(JSON.stringify(input));
+}
+
 const state = {
   currentPracticeIndex: -1,
   currentRecommendationKey: null,
   activeWalkthroughKey: null,
   walkthroughStep: 0,
   walkthroughTrace: [],
-  visualizerOpener: null
+  visualizerOpener: null,
+  walkthroughInputs: {
+    graph: cloneInput(walkthroughs.bfs.preset),
+    binarySearch: cloneInput(walkthroughs.binarySearch.preset),
+    slidingWindow: cloneInput(walkthroughs.slidingWindow.preset)
+  },
+  lastValidInputs: Object.fromEntries(
+    Object.entries(walkthroughs).map(([key, walkthrough]) => [key, cloneInput(walkthrough.preset)])
+  )
 };
 
 function getSelectedConditions() {
@@ -298,6 +315,264 @@ function getEdgeKey(from, to) {
   return [from, to].sort().join("-");
 }
 
+function createGraphComparison(step) {
+  const weights = Object.fromEntries(
+    step.graph.edges.map((edge) => [getEdgeKey(edge.from, edge.to).replace("-", ""), edge.weight])
+  );
+  const graphInput = {
+    ...weights,
+    start: step.finalPath[0],
+    destination: step.finalPath.at(-1)
+  };
+  const comparison = createElement("section", "state-block route-comparison");
+  const bfsResult = walkthroughs.bfs.generateTrace(graphInput).at(-1).result;
+  let dijkstraResult;
+
+  try {
+    dijkstraResult = walkthroughs.dijkstra.generateTrace(graphInput).at(-1).result;
+  } catch (error) {
+    dijkstraResult = "Unavailable: Dijkstra requires nonnegative weights.";
+  }
+
+  comparison.append(
+    createElement("h3", "", "Route comparison"),
+    createElement("p", "", `BFS — ${bfsResult}`),
+    createElement("p", "", `Dijkstra — ${dijkstraResult}`)
+  );
+  return comparison;
+}
+
+function createInputField({ name, label, value, type = "text", hint = "", attributes = {} }) {
+  const wrapper = createElement("div", "walkthrough-field");
+  const labelElement = createElement("label", "", label);
+  const input = createElement("input", "walkthrough-input");
+  const error = createElement("p", "field-error");
+  const errorId = `${name}-input-error`;
+
+  labelElement.htmlFor = name;
+  input.id = name;
+  input.name = name;
+  input.type = type;
+  input.value = value;
+  input.setAttribute("aria-describedby", errorId);
+  Object.entries(attributes).forEach(([attribute, attributeValue]) => {
+    input.setAttribute(attribute, attributeValue);
+  });
+  error.id = errorId;
+  error.dataset.errorFor = name;
+
+  wrapper.append(labelElement, input);
+  if (hint) wrapper.append(createElement("span", "field-hint", hint));
+  wrapper.append(error);
+  return wrapper;
+}
+
+function createSelectField({ name, label, value, options }) {
+  const wrapper = createElement("div", "walkthrough-field");
+  const labelElement = createElement("label", "", label);
+  const select = createElement("select", "walkthrough-input");
+  const error = createElement("p", "field-error");
+  const errorId = `${name}-input-error`;
+
+  labelElement.htmlFor = name;
+  select.id = name;
+  select.name = name;
+  select.setAttribute("aria-describedby", errorId);
+  options.forEach((optionValue) => {
+    const option = createElement("option", "", optionValue);
+    option.value = optionValue;
+    option.selected = optionValue === value;
+    select.append(option);
+  });
+  error.id = errorId;
+  error.dataset.errorFor = name;
+  wrapper.append(labelElement, select, error);
+  return wrapper;
+}
+
+function renderWalkthroughInputForm(errors = {}) {
+  const walkthrough = walkthroughs[state.activeWalkthroughKey];
+  const input = state.walkthroughInputs[walkthrough.inputGroup];
+  const fields = [];
+
+  if (walkthrough.type === "graph") {
+    dom.walkthroughInputHelp.textContent = "Edit the three undirected edge weights, then compare algorithms with the same start and destination.";
+    fields.push(
+      createInputField({ name: "AB", label: "A–B weight", value: input.AB, type: "number", attributes: { step: "any" } }),
+      createInputField({ name: "BC", label: "B–C weight", value: input.BC, type: "number", attributes: { step: "any" } }),
+      createInputField({ name: "AC", label: "A–C weight", value: input.AC, type: "number", attributes: { step: "any" } }),
+      createSelectField({ name: "start", label: "Start node", value: input.start, options: ["A", "B", "C"] }),
+      createSelectField({ name: "destination", label: "Destination", value: input.destination, options: ["A", "B", "C"] })
+    );
+  } else if (walkthrough.type === "array") {
+    dom.walkthroughInputHelp.textContent = "Enter numbers in nondecreasing order, separated by commas or spaces.";
+    fields.push(
+      createInputField({
+        name: "values",
+        label: "Sorted number list",
+        value: input.values.join(", "),
+        hint: "Example: 2, 4, 7, 11"
+      }),
+      createInputField({ name: "target", label: "Target", value: input.target, type: "number", attributes: { step: "any" } })
+    );
+  } else {
+    dom.walkthroughInputHelp.textContent = "Enter any numbers, then choose a whole-number window size.";
+    fields.push(
+      createInputField({
+        name: "values",
+        label: "Number list",
+        value: input.values.join(", "),
+        hint: "Negative values are supported"
+      }),
+      createInputField({
+        name: "windowSize",
+        label: "Window size",
+        value: input.windowSize,
+        type: "number",
+        attributes: { min: "1", max: String(input.values.length), step: "1" }
+      })
+    );
+  }
+
+  dom.walkthroughInputFields.replaceChildren(...fields);
+  renderInputErrors(errors);
+}
+
+function parseNumberList(value) {
+  if (Array.isArray(value)) return { values: [...value], error: null };
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return { values: [], error: "Enter at least one number." };
+
+  const values = trimmed.split(/[\s,]+/).map(Number);
+  if (values.some((number) => !Number.isFinite(number))) {
+    return { values: [], error: "Use only numbers separated by commas or spaces." };
+  }
+
+  return { values, error: null };
+}
+
+function normalizeWalkthroughInput(key, source) {
+  const walkthrough = walkthroughs[key];
+  const errors = {};
+
+  if (walkthrough.type === "graph") {
+    const input = {
+      AB: Number(source.AB),
+      BC: Number(source.BC),
+      AC: Number(source.AC),
+      start: source.start,
+      destination: source.destination
+    };
+
+    ["AB", "BC", "AC"].forEach((edge) => {
+      if (source[edge] === "" || !Number.isFinite(input[edge])) {
+        errors[edge] = "Enter a valid edge weight.";
+      } else if (key === "dijkstra" && input[edge] < 0) {
+        errors[edge] = "Dijkstra requires a nonnegative weight.";
+      }
+    });
+
+    return { input, errors };
+  }
+
+  const parsedValues = parseNumberList(source.values);
+  if (parsedValues.error) errors.values = parsedValues.error;
+
+  if (walkthrough.type === "array") {
+    const target = Number(source.target);
+    if (source.target === "" || !Number.isFinite(target)) errors.target = "Enter a valid target number.";
+    if (!parsedValues.error && parsedValues.values.some((value, index) => index > 0 && value < parsedValues.values[index - 1])) {
+      errors.values = "Binary search requires the list to be sorted from smallest to largest.";
+    }
+    return { input: { values: parsedValues.values, target }, errors };
+  }
+
+  const windowSize = Number(source.windowSize);
+  if (source.windowSize === "" || !Number.isInteger(windowSize)) {
+    errors.windowSize = "Window size must be a whole number.";
+  } else if (!parsedValues.error && (windowSize < 1 || windowSize > parsedValues.values.length)) {
+    errors.windowSize = `Choose a window size from 1 to ${parsedValues.values.length}.`;
+  }
+  return { input: { values: parsedValues.values, windowSize }, errors };
+}
+
+function getWalkthroughInputDraft() {
+  const fields = dom.walkthroughInputForm.elements;
+  const walkthrough = walkthroughs[state.activeWalkthroughKey];
+
+  if (walkthrough.type === "graph") {
+    return {
+      AB: fields.AB.value,
+      BC: fields.BC.value,
+      AC: fields.AC.value,
+      start: fields.start.value,
+      destination: fields.destination.value
+    };
+  }
+
+  if (walkthrough.type === "array") {
+    return { values: fields.values.value, target: fields.target.value };
+  }
+
+  return { values: fields.values.value, windowSize: fields.windowSize.value };
+}
+
+function renderInputErrors(errors) {
+  dom.walkthroughInputFields.querySelectorAll(".field-error").forEach((errorElement) => {
+    const fieldName = errorElement.dataset.errorFor;
+    const message = errors[fieldName] || "";
+    const input = dom.walkthroughInputForm.elements[fieldName];
+    errorElement.textContent = message;
+    if (input) input.setAttribute("aria-invalid", String(Boolean(message)));
+  });
+
+  const errorCount = Object.keys(errors).length;
+  dom.walkthroughInputStatus.textContent = errorCount
+    ? "Fix the highlighted input. The last valid walkthrough is still shown."
+    : "";
+  dom.walkthroughInputStatus.classList.toggle("error", errorCount > 0);
+}
+
+function applyWalkthroughInput(event) {
+  event.preventDefault();
+  const key = state.activeWalkthroughKey;
+  const walkthrough = walkthroughs[key];
+  const { input, errors } = normalizeWalkthroughInput(key, getWalkthroughInputDraft());
+
+  if (Object.keys(errors).length) {
+    renderInputErrors(errors);
+    return;
+  }
+
+  state.walkthroughInputs[walkthrough.inputGroup] = cloneInput(input);
+  state.lastValidInputs[key] = cloneInput(input);
+  state.walkthroughTrace = walkthrough.generateTrace(input);
+  state.walkthroughStep = 0;
+  renderWalkthroughStep();
+  renderWalkthroughInputForm();
+  dom.walkthroughInputStatus.textContent = "Input applied. Walkthrough restarted at step one.";
+}
+
+function resetWalkthroughInput() {
+  const key = state.activeWalkthroughKey;
+  const walkthrough = walkthroughs[key];
+  const preset = cloneInput(walkthrough.preset);
+
+  state.walkthroughInputs[walkthrough.inputGroup] = preset;
+  if (walkthrough.inputGroup === "graph") {
+    state.lastValidInputs.bfs = cloneInput(walkthroughs.bfs.preset);
+    state.lastValidInputs.dijkstra = cloneInput(walkthroughs.dijkstra.preset);
+  } else {
+    state.lastValidInputs[key] = cloneInput(preset);
+  }
+  state.walkthroughTrace = walkthrough.generateTrace(preset);
+  state.walkthroughStep = 0;
+  renderWalkthroughInputForm();
+  dom.walkthroughInputStatus.textContent = "Original example restored.";
+  renderWalkthroughStep();
+}
+
 function renderGraphStep(walkthrough, step) {
   const layout = {
     A: { x: 54, y: 132 },
@@ -306,12 +581,18 @@ function renderGraphStep(walkthrough, step) {
   };
   const wrapper = createElement("div", "graph-walkthrough");
   const graphPanel = createElement("div", "graph-panel");
+  const graph = step.graph;
+  const edgeDescription = graph.edges
+    .map((edge) => `${edge.from} to ${edge.to} weight ${edge.weight}`)
+    .join(", ");
   const svg = createSvgElement("svg", {
     viewBox: "0 0 380 190",
     role: "img",
-    "aria-label": "Undirected graph with A to B weight 1, B to C weight 1, and A to C weight 10"
+    "aria-label": `Undirected graph with ${edgeDescription}`
   });
-  const highlightedEdges = new Set(step.highlightedEdges || []);
+  const highlightedEdges = new Set(
+    (step.highlightedEdges || []).map((edge) => getEdgeKey(...edge.split("-")))
+  );
   const finalEdges = new Set();
 
   if (step.finalPath) {
@@ -320,7 +601,7 @@ function renderGraphStep(walkthrough, step) {
     }
   }
 
-  walkthrough.graph.edges.forEach((edge) => {
+  graph.edges.forEach((edge) => {
     const start = layout[edge.from];
     const end = layout[edge.to];
     const edgeKey = getEdgeKey(edge.from, edge.to);
@@ -345,7 +626,7 @@ function renderGraphStep(walkthrough, step) {
     svg.append(line, weight);
   });
 
-  walkthrough.graph.nodes.forEach((node) => {
+  graph.nodes.forEach((node) => {
     const point = layout[node];
     const isActive = step.activeNode === node;
     const isFinal = step.finalPath && step.finalPath.includes(node);
@@ -393,6 +674,7 @@ function renderGraphStep(walkthrough, step) {
 
   if (step.result) {
     details.append(createElement("p", "walkthrough-result", step.result));
+    details.append(createGraphComparison(step));
   }
 
   wrapper.append(graphPanel, details);
@@ -416,7 +698,9 @@ function renderArrayCells(step, getClassName, getLabel) {
 
 function renderBinarySearchStep(step) {
   const wrapper = createElement("div", "array-walkthrough");
-  const rangeText = step.foundIndex === undefined
+  const rangeText = step.notFound
+    ? "Search range exhausted"
+    : step.foundIndex === undefined
     ? `Current range: ${step.left}–${step.right}`
     : `Result: zero-based index ${step.foundIndex}`;
   wrapper.append(createElement("p", "array-summary", `Target: ${step.target} · ${rangeText}`));
@@ -437,7 +721,9 @@ function renderBinarySearchStep(step) {
       return "";
     }
   ));
-  if (step.result) wrapper.append(createElement("p", "walkthrough-result", step.result));
+  if (step.result) {
+    wrapper.append(createElement("p", step.notFound ? "walkthrough-result not-found" : "walkthrough-result", step.result));
+  }
   return wrapper;
 }
 
@@ -452,16 +738,25 @@ function renderSlidingWindowStep(step) {
     createElement("span", "", `Window: indices ${step.start}–${end}`),
     createElement("span", "", changes),
     createElement("span", "", `Current sum: ${step.sum}`),
-    createElement("span", "best-sum", `Best sum: ${step.best}`)
+    createElement("span", "best-sum", `Best: ${step.best} at indices ${step.bestStart}–${step.bestStart + step.windowSize - 1}`)
   );
   wrapper.append(summary);
   wrapper.append(renderArrayCells(
     step,
-    (index) => index >= step.start && index <= end ? "in-window" : "outside-window",
     (index) => {
-      if (index === step.start) return "WINDOW START";
-      if (index === end) return "WINDOW END";
-      if (index > step.start && index < end) return "IN WINDOW";
+      const inWindow = index >= step.start && index <= end;
+      const inBestWindow = index >= step.bestStart && index < step.bestStart + step.windowSize;
+      if (inWindow && inBestWindow) return "in-window best-window";
+      if (inWindow) return "in-window";
+      if (inBestWindow) return "best-window";
+      return "outside-window";
+    },
+    (index) => {
+      const isBest = index >= step.bestStart && index < step.bestStart + step.windowSize;
+      if (index === step.start) return isBest ? "WINDOW START · BEST" : "WINDOW START";
+      if (index === end) return isBest ? "WINDOW END · BEST" : "WINDOW END";
+      if (index > step.start && index < end) return isBest ? "IN WINDOW · BEST" : "IN WINDOW";
+      if (isBest) return "BEST WINDOW";
       return "OUTSIDE";
     }
   ));
@@ -506,10 +801,20 @@ function renderWalkthroughStep() {
 }
 
 function activateWalkthrough(key) {
+  const walkthrough = walkthroughs[key];
+  const sharedInput = state.walkthroughInputs[walkthrough.inputGroup];
+  const { input, errors } = normalizeWalkthroughInput(key, sharedInput);
+
   state.activeWalkthroughKey = key;
-  state.walkthroughTrace = walkthroughs[key].generateTrace();
+  if (Object.keys(errors).length) {
+    state.walkthroughTrace = walkthrough.generateTrace(state.lastValidInputs[key]);
+  } else {
+    state.lastValidInputs[key] = cloneInput(input);
+    state.walkthroughTrace = walkthrough.generateTrace(input);
+  }
   state.walkthroughStep = 0;
   renderWalkthroughStep();
+  renderWalkthroughInputForm(errors);
 }
 
 function openWalkthrough(key, opener) {
@@ -547,7 +852,8 @@ function changeWalkthroughStep(amount) {
 }
 
 function restartWalkthrough() {
-  state.walkthroughTrace = walkthroughs[state.activeWalkthroughKey].generateTrace();
+  const key = state.activeWalkthroughKey;
+  state.walkthroughTrace = walkthroughs[key].generateTrace(state.lastValidInputs[key]);
   state.walkthroughStep = 0;
   renderWalkthroughStep();
 }
@@ -599,6 +905,7 @@ function togglePracticeAnswer() {
 
 function handleKeydown(event) {
   const visualizerIsOpen = !dom.visualizerModal.classList.contains("hidden");
+  const isEditingInput = ["INPUT", "SELECT", "TEXTAREA"].includes(event.target?.tagName);
 
   if (visualizerIsOpen && event.key === "Escape") {
     event.preventDefault();
@@ -606,13 +913,13 @@ function handleKeydown(event) {
     return;
   }
 
-  if (visualizerIsOpen && event.key === "ArrowLeft") {
+  if (visualizerIsOpen && !isEditingInput && event.key === "ArrowLeft") {
     event.preventDefault();
     changeWalkthroughStep(-1);
     return;
   }
 
-  if (visualizerIsOpen && event.key === "ArrowRight") {
+  if (visualizerIsOpen && !isEditingInput && event.key === "ArrowRight") {
     event.preventDefault();
     changeWalkthroughStep(1);
     return;
@@ -655,6 +962,8 @@ function bindEvents() {
   dom.previousStepButton.addEventListener("click", () => changeWalkthroughStep(-1));
   dom.nextStepButton.addEventListener("click", () => changeWalkthroughStep(1));
   dom.restartWalkthroughButton.addEventListener("click", restartWalkthrough);
+  dom.walkthroughInputForm.addEventListener("submit", applyWalkthroughInput);
+  dom.resetWalkthroughInputButton.addEventListener("click", resetWalkthroughInput);
   document.addEventListener("keydown", handleKeydown);
 }
 
