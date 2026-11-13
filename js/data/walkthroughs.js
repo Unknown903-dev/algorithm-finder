@@ -10,7 +10,8 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
   const presets = {
     graph: { AB: 1, BC: 1, AC: 10, start: "A", destination: "C" },
     binarySearch: { values: [2, 4, 7, 11, 15, 19, 23, 28], target: 19 },
-    slidingWindow: { values: [2, 1, 5, 1, 3, 2, 4, 1], windowSize: 3 }
+    slidingWindow: { values: [2, 1, 5, 1, 3, 2, 4, 1], windowSize: 3 },
+    sortingComparison: { values: [8, 3, 5, 4, 7, 6, 1, 2] }
   };
 
   function clone(value) {
@@ -375,6 +376,215 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
     return trace;
   }
 
+  function createMergeSortEvents(input) {
+    const values = [...input.values];
+    const temporary = Array(values.length).fill(null);
+    const events = [];
+    let comparisons = 0;
+    let writes = 0;
+
+    function record(explanation, details = {}) {
+      events.push({
+        values: [...values],
+        temporary: [...temporary],
+        comparisons,
+        writes,
+        explanation,
+        activeRange: null,
+        comparedIndices: [],
+        writeTarget: null,
+        finished: false,
+        ...details
+      });
+    }
+
+    function merge(left, midpoint, right) {
+      temporary.fill(null);
+      record(`Merge the sorted ranges ${left}–${midpoint} and ${midpoint + 1}–${right}.`, {
+        activeRange: [left, right]
+      });
+
+      let leftIndex = left;
+      let rightIndex = midpoint + 1;
+      let writeIndex = left;
+
+      while (leftIndex <= midpoint && rightIndex <= right) {
+        const comparedIndices = [leftIndex, rightIndex];
+        const leftValue = values[leftIndex];
+        const rightValue = values[rightIndex];
+        comparisons += 1;
+        const takeLeft = leftValue <= rightValue;
+        const selectedValue = takeLeft ? leftValue : rightValue;
+        temporary[writeIndex] = selectedValue;
+        writes += 1;
+        record(`Compare ${leftValue} and ${rightValue}; write ${selectedValue} to temporary slot ${writeIndex}.`, {
+          activeRange: [left, right],
+          comparedIndices,
+          writeTarget: { storage: "temporary", index: writeIndex }
+        });
+        if (takeLeft) leftIndex += 1;
+        else rightIndex += 1;
+        writeIndex += 1;
+      }
+
+      while (leftIndex <= midpoint) {
+        temporary[writeIndex] = values[leftIndex];
+        writes += 1;
+        record(`The right half is empty; write ${values[leftIndex]} to temporary slot ${writeIndex}.`, {
+          activeRange: [left, right],
+          writeTarget: { storage: "temporary", index: writeIndex }
+        });
+        leftIndex += 1;
+        writeIndex += 1;
+      }
+
+      while (rightIndex <= right) {
+        temporary[writeIndex] = values[rightIndex];
+        writes += 1;
+        record(`The left half is empty; write ${values[rightIndex]} to temporary slot ${writeIndex}.`, {
+          activeRange: [left, right],
+          writeTarget: { storage: "temporary", index: writeIndex }
+        });
+        rightIndex += 1;
+        writeIndex += 1;
+      }
+
+      for (let index = left; index <= right; index += 1) {
+        values[index] = temporary[index];
+        writes += 1;
+        record(`Copy ${temporary[index]} from temporary storage back to array index ${index}.`, {
+          activeRange: [left, right],
+          writeTarget: { storage: "array", index }
+        });
+      }
+    }
+
+    function mergeSort(left, right) {
+      if (left >= right) return;
+      const midpoint = Math.floor((left + right) / 2);
+      mergeSort(left, midpoint);
+      mergeSort(midpoint + 1, right);
+      merge(left, midpoint, right);
+    }
+
+    record("Start Merge Sort. Split the array recursively, then merge sorted halves.");
+    mergeSort(0, values.length - 1);
+    record("Merge Sort is finished.", { finished: true, activeRange: values.length ? [0, values.length - 1] : null });
+    return events;
+  }
+
+  function createQuickSortEvents(input) {
+    const values = [...input.values];
+    const events = [];
+    let comparisons = 0;
+    let writes = 0;
+
+    function record(explanation, details = {}) {
+      events.push({
+        values: [...values],
+        comparisons,
+        writes,
+        explanation,
+        activeRange: null,
+        comparedIndices: [],
+        swappedIndices: [],
+        pivotIndex: null,
+        finished: false,
+        ...details
+      });
+    }
+
+    function swap(first, second) {
+      const saved = values[first];
+      values[first] = values[second];
+      values[second] = saved;
+      writes += 2;
+    }
+
+    function partition(low, high) {
+      const pivotValue = values[high];
+      let smallerEnd = low;
+      record(`Partition indices ${low}–${high}. The last value, ${pivotValue}, is the pivot.`, {
+        activeRange: [low, high],
+        pivotIndex: high
+      });
+
+      for (let scan = low; scan < high; scan += 1) {
+        comparisons += 1;
+        const belongsOnLeft = values[scan] <= pivotValue;
+        record(`Compare ${values[scan]} with pivot ${pivotValue}. ${belongsOnLeft ? "It belongs on the pivot’s left." : "It stays on the pivot’s right."}`, {
+          activeRange: [low, high],
+          comparedIndices: [scan, high],
+          pivotIndex: high
+        });
+
+        if (belongsOnLeft) {
+          if (smallerEnd !== scan) {
+            const firstValue = values[smallerEnd];
+            const secondValue = values[scan];
+            swap(smallerEnd, scan);
+            record(`Swap ${firstValue} and ${secondValue} to grow the left partition.`, {
+              activeRange: [low, high],
+              swappedIndices: [smallerEnd, scan],
+              pivotIndex: high
+            });
+          }
+          smallerEnd += 1;
+        }
+      }
+
+      if (smallerEnd !== high) {
+        const displacedValue = values[smallerEnd];
+        swap(smallerEnd, high);
+        record(`Swap pivot ${pivotValue} with ${displacedValue}; the pivot is now fixed at index ${smallerEnd}.`, {
+          activeRange: [low, high],
+          swappedIndices: [smallerEnd, high],
+          pivotIndex: smallerEnd
+        });
+      } else {
+        record(`Pivot ${pivotValue} is already fixed at index ${high}; no write is needed.`, {
+          activeRange: [low, high],
+          pivotIndex: high
+        });
+      }
+      return smallerEnd;
+    }
+
+    function quickSort(low, high) {
+      if (low >= high) return;
+      const pivotIndex = partition(low, high);
+      quickSort(low, pivotIndex - 1);
+      quickSort(pivotIndex + 1, high);
+    }
+
+    record("Start Quick Sort using Lomuto partitioning: the last value in each partition is the pivot.");
+    quickSort(0, values.length - 1);
+    record("Quick Sort is finished.", { finished: true, activeRange: values.length ? [0, values.length - 1] : null });
+    return events;
+  }
+
+  function createSortingComparisonTrace(input = presets.sortingComparison) {
+    const mergeEvents = createMergeSortEvents(input);
+    const quickEvents = createQuickSortEvents(input);
+    const eventCount = Math.max(mergeEvents.length, quickEvents.length);
+
+    return Array.from({ length: eventCount }, (_, index) => {
+      const mergeIndex = Math.min(index, mergeEvents.length - 1);
+      const quickIndex = Math.min(index, quickEvents.length - 1);
+      return {
+        merge: mergeEvents[mergeIndex],
+        quick: quickEvents[quickIndex],
+        mergeEvent: mergeIndex + 1,
+        mergeEventCount: mergeEvents.length,
+        quickEvent: quickIndex + 1,
+        quickEventCount: quickEvents.length,
+        explanation: index === 0
+          ? "Each shared step advances one visual event in each unfinished algorithm. Use the counters to compare their work."
+          : `Visual event ${index + 1}: each unfinished algorithm advances once; a finished algorithm stays on its result.`
+      };
+    });
+  }
+
   data.walkthroughs = {
     dijkstra: {
       title: "Dijkstra’s Algorithm",
@@ -407,6 +617,19 @@ window.AlgorithmFinderData = window.AlgorithmFinderData || {};
       inputGroup: "slidingWindow",
       preset: clone(presets.slidingWindow),
       generateTrace: createSlidingWindowTrace
+    },
+    sortingComparison: {
+      title: "Merge Sort vs. Quick Sort",
+      subtitle: "Compare two sorting strategies on the same array",
+      type: "sortingComparison",
+      inputGroup: "sortingComparison",
+      preset: clone(presets.sortingComparison),
+      inputPresets: {
+        alreadySorted: [1, 2, 3, 4, 5, 6, 7, 8],
+        reverseSorted: [8, 7, 6, 5, 4, 3, 2, 1],
+        manyDuplicates: [4, 2, 4, 1, 2, 4, 1, 2]
+      },
+      generateTrace: createSortingComparisonTrace
     }
   };
 })(window.AlgorithmFinderData);

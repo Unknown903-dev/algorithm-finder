@@ -65,7 +65,8 @@ const state = {
   walkthroughInputs: {
     graph: cloneInput(walkthroughs.bfs.preset),
     binarySearch: cloneInput(walkthroughs.binarySearch.preset),
-    slidingWindow: cloneInput(walkthroughs.slidingWindow.preset)
+    slidingWindow: cloneInput(walkthroughs.slidingWindow.preset),
+    sortingComparison: cloneInput(walkthroughs.sortingComparison.preset)
   },
   lastValidInputs: Object.fromEntries(
     Object.entries(walkthroughs).map(([key, walkthrough]) => [key, cloneInput(walkthrough.preset)])
@@ -284,6 +285,13 @@ function buildAlgorithmCard(key, algorithm) {
     actions.append(visualizeButton);
   }
 
+  if (["mergeSort", "quickSort"].includes(key)) {
+    const compareButton = createElement("button", "visualize-button compare-sorting-button", "Compare Sorting Algorithms");
+    compareButton.type = "button";
+    compareButton.addEventListener("click", () => openWalkthrough("sortingComparison", compareButton));
+    actions.append(compareButton);
+  }
+
   card.append(title, summary, tagRow, actions);
   return card;
 }
@@ -402,6 +410,42 @@ function createSelectField({ name, label, value, options }) {
   return wrapper;
 }
 
+function getRandomSortingValues() {
+  return Array.from({ length: 8 }, () => Math.floor(Math.random() * 30) - 9);
+}
+
+function fillSortingPreset(presetKey, label) {
+  const walkthrough = walkthroughs.sortingComparison;
+  const values = presetKey === "random"
+    ? getRandomSortingValues()
+    : walkthrough.inputPresets[presetKey];
+
+  dom.walkthroughInputForm.elements.values.value = values.join(", ");
+  renderInputErrors({});
+  dom.walkthroughInputStatus.textContent = `${label} preset loaded. Select Apply Input to compare it.`;
+}
+
+function createSortingPresetControls() {
+  const wrapper = createElement("div", "sorting-preset-field");
+  const label = createElement("span", "preset-label", "Presets");
+  const buttons = createElement("div", "sorting-preset-buttons");
+  const presets = [
+    ["random", "Random"],
+    ["alreadySorted", "Already Sorted"],
+    ["reverseSorted", "Reverse Sorted"],
+    ["manyDuplicates", "Many Duplicates"]
+  ];
+
+  presets.forEach(([key, buttonLabel]) => {
+    const button = createElement("button", "sorting-preset-button", buttonLabel);
+    button.type = "button";
+    button.addEventListener("click", () => fillSortingPreset(key, buttonLabel));
+    buttons.append(button);
+  });
+  wrapper.append(label, buttons);
+  return wrapper;
+}
+
 function renderWalkthroughInputForm(errors = {}) {
   const walkthrough = walkthroughs[state.activeWalkthroughKey];
   const input = state.walkthroughInputs[walkthrough.inputGroup];
@@ -415,6 +459,17 @@ function renderWalkthroughInputForm(errors = {}) {
       createInputField({ name: "AC", label: "A–C weight", value: input.AC, type: "number", attributes: { step: "any" } }),
       createSelectField({ name: "start", label: "Start node", value: input.start, options: ["A", "B", "C"] }),
       createSelectField({ name: "destination", label: "Destination", value: input.destination, options: ["A", "B", "C"] })
+    );
+  } else if (walkthrough.type === "sortingComparison") {
+    dom.walkthroughInputHelp.textContent = "Choose a preset or enter 1–16 numbers. The same array is applied to both algorithms.";
+    fields.push(
+      createSortingPresetControls(),
+      createInputField({
+        name: "values",
+        label: "Shared starting array",
+        value: input.values.join(", "),
+        hint: "Numbers may be negative or repeated"
+      })
     );
   } else if (walkthrough.type === "array") {
     dom.walkthroughInputHelp.textContent = "Enter numbers in nondecreasing order, separated by commas or spaces.";
@@ -500,6 +555,13 @@ function normalizeWalkthroughInput(key, source) {
     return { input: { values: parsedValues.values, target }, errors };
   }
 
+  if (walkthrough.type === "sortingComparison") {
+    if (!parsedValues.error && parsedValues.values.length > 16) {
+      errors.values = "Use at most 16 values so both bar charts remain readable.";
+    }
+    return { input: { values: parsedValues.values }, errors };
+  }
+
   const windowSize = Number(source.windowSize);
   if (source.windowSize === "" || !Number.isInteger(windowSize)) {
     errors.windowSize = "Window size must be a whole number.";
@@ -525,6 +587,11 @@ function getWalkthroughInputDraft() {
 
   if (walkthrough.type === "array") {
     return { values: fields.values.value, target: fields.target.value };
+  }
+
+
+  if (walkthrough.type === "sortingComparison") {
+    return { values: fields.values.value };
   }
 
   return { values: fields.values.value, windowSize: fields.windowSize.value };
@@ -777,6 +844,127 @@ function renderSlidingWindowStep(step) {
   return wrapper;
 }
 
+function getSortingBarHeight(values, value) {
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  if (minimum === maximum) return 88;
+  return 38 + ((value - minimum) / (maximum - minimum)) * 92;
+}
+
+function getSortingBarState(event, index, algorithm) {
+  const states = [];
+  const inActiveRange = event.activeRange && index >= event.activeRange[0] && index <= event.activeRange[1];
+
+  if (inActiveRange) states.push(algorithm === "merge" ? "merge-active" : "partition-active");
+  if (event.comparedIndices.includes(index)) states.push("sorting-compared");
+  if (event.swappedIndices?.includes(index)) states.push("sorting-swapped");
+  if (event.pivotIndex === index) states.push("sorting-pivot");
+  if (event.writeTarget?.storage === "array" && event.writeTarget.index === index) states.push("sorting-written");
+  return states;
+}
+
+function getSortingBarLabel(event, index, algorithm) {
+  const labels = [];
+  if (event.pivotIndex === index) labels.push("PIVOT");
+  if (event.comparedIndices.includes(index)) labels.push("COMPARE");
+  if (event.swappedIndices?.includes(index)) labels.push("SWAP");
+  if (event.writeTarget?.storage === "array" && event.writeTarget.index === index) labels.push("WRITE");
+  if (!labels.length && event.activeRange && index >= event.activeRange[0] && index <= event.activeRange[1]) {
+    labels.push(algorithm === "merge" ? "MERGE" : "PARTITION");
+  }
+  return labels.join(" · ");
+}
+
+function renderSortingBars(event, algorithm) {
+  const bars = createElement("div", "sorting-bars");
+  bars.style.setProperty("--sorting-count", event.values.length);
+
+  event.values.forEach((value, index) => {
+    const states = getSortingBarState(event, index, algorithm);
+    const wrapper = createElement("div", `sorting-bar-item ${states.join(" ")}`.trim());
+    const bar = createElement("div", "sorting-bar");
+    const valueLabel = createElement("strong", "sorting-bar-value", formatVisualNumber(value));
+    const indexLabel = createElement("span", "sorting-bar-index", String(index));
+    const stateLabel = createElement("span", "sorting-bar-state", getSortingBarLabel(event, index, algorithm));
+    bar.style.height = `${getSortingBarHeight(event.values, value)}px`;
+    wrapper.setAttribute("aria-label", `Index ${index}, value ${value}${stateLabel.textContent ? `, ${stateLabel.textContent.toLowerCase()}` : ""}`);
+    bar.append(valueLabel);
+    wrapper.append(bar, indexLabel, stateLabel);
+    bars.append(wrapper);
+  });
+  return bars;
+}
+
+function renderMergeTemporaryStorage(event) {
+  const section = createElement("div", "temporary-storage");
+  const label = createElement("span", "temporary-label", "Temporary storage");
+  const cells = createElement("div", "temporary-cells");
+  cells.style.setProperty("--sorting-count", event.temporary.length);
+
+  event.temporary.forEach((value, index) => {
+    const isWrite = event.writeTarget?.storage === "temporary" && event.writeTarget.index === index;
+    const cell = createElement("span", isWrite ? "temporary-cell sorting-written" : "temporary-cell", value === null ? "—" : formatVisualNumber(value));
+    cell.setAttribute("aria-label", `Temporary index ${index}: ${value === null ? "empty" : value}${isWrite ? ", current write" : ""}`);
+    cells.append(cell);
+  });
+  section.append(label, cells);
+  return section;
+}
+
+function renderSortingPanel({ title, algorithm, event, eventNumber, eventCount }) {
+  const panel = createElement("section", `sorting-panel ${algorithm}-panel`);
+  const header = createElement("header", "sorting-panel-header");
+  const heading = createElement("h3", "", title);
+  const progress = createElement("span", event.finished ? "sorting-finished" : "sorting-event-progress", event.finished ? "Finished" : `Event ${eventNumber} of ${eventCount}`);
+  const counters = createElement("div", "sorting-counters");
+  counters.append(
+    createElement("span", "", `Comparisons: ${event.comparisons}`),
+    createElement("span", "", `Writes: ${event.writes}`)
+  );
+  header.append(heading, progress);
+  panel.append(header, counters);
+  if (algorithm === "quick") {
+    panel.append(createElement("p", "pivot-rule", "Pivot rule: last value in each active partition (Lomuto partitioning)."));
+  } else {
+    panel.append(createElement("p", "pivot-rule merge-rule", "Merge rule: compare the front values and take the left value first on ties."));
+  }
+  panel.append(renderSortingBars(event, algorithm));
+  if (algorithm === "merge") panel.append(renderMergeTemporaryStorage(event));
+  panel.append(createElement("p", "sorting-event-explanation", event.explanation));
+  if (event.finished) {
+    panel.append(createElement("p", "sorting-result", `Sorted result: [${event.values.join(", ")}]`));
+  }
+  return panel;
+}
+
+function renderSortingComparisonStep(step) {
+  const wrapper = createElement("div", "sorting-comparison");
+  const definitions = createElement("div", "sorting-counter-definitions");
+  definitions.append(
+    createElement("strong", "", "What the counters include"),
+    createElement("p", "", "A comparison is one value-to-value check. Merge Sort writes count assignments to temporary storage and copies back to the array. Quick Sort writes count assignments to the main array; each two-value swap counts as 2 writes.")
+  );
+  const panels = createElement("div", "sorting-panels");
+  panels.append(
+    renderSortingPanel({
+      title: "Merge Sort",
+      algorithm: "merge",
+      event: step.merge,
+      eventNumber: step.mergeEvent,
+      eventCount: step.mergeEventCount
+    }),
+    renderSortingPanel({
+      title: "Quick Sort",
+      algorithm: "quick",
+      event: step.quick,
+      eventNumber: step.quickEvent,
+      eventCount: step.quickEventCount
+    })
+  );
+  wrapper.append(definitions, panels);
+  return wrapper;
+}
+
 function renderWalkthroughSwitcher() {
   const buttons = Object.entries(walkthroughs).map(([key, walkthrough]) => {
     const button = createElement("button", "walkthrough-tab", walkthrough.title.replace(" Algorithm", ""));
@@ -799,6 +987,8 @@ function renderWalkthroughStep() {
     visualization = renderGraphStep(walkthrough, step);
   } else if (walkthrough.type === "array") {
     visualization = renderBinarySearchStep(step);
+  } else if (walkthrough.type === "sortingComparison") {
+    visualization = renderSortingComparisonStep(step);
   } else {
     visualization = renderSlidingWindowStep(step);
   }
